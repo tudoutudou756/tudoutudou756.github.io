@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模型评估 - 混淆矩阵与ROC曲线</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h2 { color: #a05f1c; border-left: 5px solid #a05f1c; padding-left: 10px; margin-top: 35px; }
+        h3 { color: #4a3e2d; margin-top: 20px; }
+
+        .layout { display: flex; gap: 30px; flex-wrap: wrap; }
+        .cm-panel { flex: 1 1 420px; }
+        .roc-panel { flex: 1 1 480px; }
+
+        table.confusion { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        table.confusion td, table.confusion th {
+            border: 2px solid #a05f1c;
+            padding: 15px 8px;
+            text-align: center;
+            font-size: 1.05em;
+        }
+        table.confusion .cell { cursor: pointer; transition: all 0.2s; font-weight: bold; color: white; }
+        table.confusion .cell:hover { filter: brightness(1.15); }
+        table.confusion .tp { background: #28a745; }
+        table.confusion .fp { background: #dc3545; }
+        table.confusion .fn { background: #ffc107; color: #3e3324; }
+        table.confusion .tn { background: #6c757d; }
+        table.confusion .head { background: #fdf0d9; color: #a05f1c; font-weight: bold; }
+
+        .threshold-box { margin: 15px 0; padding: 12px; background: #fdf0d9; border-radius: 8px; }
+        .threshold-label { font-weight: bold; color: #a05f1c; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #d9c9ac; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #a05f1c; cursor: pointer;
+        }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .metric-item { text-align: center; min-width: 100px; }
+        .metric-value { font-size: 1.4em; font-weight: bold; color: #a05f1c; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 10px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; }
+
+        .formula-container {
+            text-align: center;
+            padding: 12px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 12px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #a05f1c;
+        }
+        .instructions h3 { margin-top: 0; color: #a05f1c; }
+
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>模型评估 - 混淆矩阵与ROC曲线</h1>
+
+        <div class="threshold-box">
+            <span class="threshold-label">分类阈值: <span id="thresholdValue">0.50</span></span>
+            <input type="range" id="thresholdSlider" min="0.05" max="0.95" step="0.05" value="0.5">
+        </div>
+
+        <div class="layout">
+            <div class="cm-panel">
+                <h3>混淆矩阵（点击单元格查看解释）</h3>
+                <table class="confusion">
+                    <tr>
+                        <td class="head"></td>
+                        <td class="head">预测：正例</td>
+                        <td class="head">预测：负例</td>
+                        <td class="head">合计</td>
+                    </tr>
+                    <tr>
+                        <td class="head">实际：正例</td>
+                        <td class="cell tp" id="cellTP">TP<br><span id="vTP">42</span></td>
+                        <td class="cell fn" id="cellFN">FN<br><span id="vFN">8</span></td>
+                        <td class="head" id="vP">50</td>
+                    </tr>
+                    <tr>
+                        <td class="head">实际：负例</td>
+                        <td class="cell fp" id="cellFP">FP<br><span id="vFP">10</span></td>
+                        <td class="cell tn" id="cellTN">TN<br><span id="vTN">40</span></td>
+                        <td class="head" id="vN">50</td>
+                    </tr>
+                    <tr>
+                        <td class="head">合计</td>
+                        <td class="head" id="vPredP">52</td>
+                        <td class="head" id="vPredN">48</td>
+                        <td class="head">100</td>
+                    </tr>
+                </table>
+
+                <div id="cellExplain" style="min-height:52px; padding:10px; background:#fbf5e8; border-radius:6px; border:1px solid #f0e6d2; color:#584a36;">
+                    点击混淆矩阵中任意单元格查看含义解释
+                </div>
+
+                <div class="metrics" style="margin-top:15px;">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAcc">0.820</div>
+                        <div class="metric-label">准确率 Accuracy</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mPrec">0.808</div>
+                        <div class="metric-label">精确率 Precision</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mRec">0.840</div>
+                        <div class="metric-label">召回率 Recall</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mF1">0.824</div>
+                        <div class="metric-label">F1 Score</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="roc-panel">
+                <h3>ROC 曲线（拖动上方阈值观察点位移动）</h3>
+                <div class="chart-box"><canvas id="rocCanvas" width="560" height="420"></canvas>
+                    <div class="formula-strip" id="rocFormula"></div>
+                </div>
+                <div class="metrics" style="margin-top:15px;">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mTPR">0.840</div>
+                        <div class="metric-label">真阳率 TPR</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mFPR">0.200</div>
+                        <div class="metric-label">假阳率 FPR</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAUC">0.900</div>
+                        <div class="metric-label">AUC（梯形法）</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <h2>指标公式速查</h2>
+        <div class="formula-container">Accuracy = (TP + TN) / (TP + TN + FP + FN)</div>
+        <div class="formula-container">Precision = TP / (TP + FP)　　Recall = TPR = TP / (TP + FN)</div>
+        <div class="formula-container">F1 = 2 × P × R / (P + R)　　FPR = FP / (FP + TN)</div>
+        <div class="formula-container">AUC：ROC 曲线下面积，等价于「随机取一正一负两个样本，模型给正样本打分更高」的概率</div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 拖动顶部滑块改变分类阈值，观察混淆矩阵四个格子的数量变化</p>
+            <p>• 注意 TPR / FPR 的联动：阈值降低 → 更多样本被判为正例 → TP 与 FP 同时增多</p>
+            <p>• ROC 曲线上当前阈值对应的点会高亮显示；曲线越靠左上角，模型越好</p>
+            <p>• 点击混淆矩阵的单元格可以查看 TP / FP / FN / TN 的通俗解释</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:24px; text-decoration:none; text-align:center; line-height:60px;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ---------- 模拟评分数据：50 个正样本 + 50 个负样本的预测得分 ----------
+        const posScores = [
+            0.97,0.95,0.94,0.92,0.90,0.88,0.86,0.85,0.83,0.82,
+            0.80,0.78,0.77,0.75,0.73,0.71,0.70,0.68,0.66,0.64,
+            0.62,0.61,0.59,0.57,0.55,0.53,0.52,0.50,0.48,0.46,
+            0.44,0.43,0.41,0.39,0.37,0.35,0.33,0.31,0.29,0.27,
+            0.25,0.23,0.21,0.19,0.17,0.15,0.13,0.11,0.09,0.07
+        ];
+        const negScores = [
+            0.93,0.90,0.88,0.85,0.82,0.79,0.76,0.73,0.70,0.67,
+            0.64,0.61,0.58,0.55,0.52,0.49,0.46,0.43,0.40,0.37,
+            0.34,0.31,0.28,0.25,0.22,0.19,0.16,0.13,0.10,0.08,
+            0.07,0.06,0.05,0.05,0.04,0.04,0.03,0.03,0.02,0.02,
+            0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01
+        ];
+        const P = posScores.length, N = negScores.length;
+
+        const slider = document.getElementById('thresholdSlider');
+
+        function computeMatrix(th) {
+            let TP = 0, FP = 0, FN = 0, TN = 0;
+            posScores.forEach(function (s) { if (s >= th) TP++; else FN++; });
+            negScores.forEach(function (s) { if (s >= th) FP++; else TN++; });
+            return { TP: TP, FP: FP, FN: FN, TN: TN };
+        }
+
+        // ---------- ROC 曲线（逐样本累积的阶梯曲线） ----------
+        function buildRocPoints() {
+            const all = [];
+            posScores.forEach(function (s) { all.push({ s: s, y: 1 }); });
+            negScores.forEach(function (s) { all.push({ s: s, y: 0 }); });
+            all.sort(function (a, b) { return b.s - a.s; });
+            const pts = [{ fpr: 0, tpr: 0, th: 1.01 }];
+            let TP = 0, FP = 0;
+            for (const item of all) {
+                if (item.y === 1) TP++; else FP++;
+                pts.push({ fpr: FP / N, tpr: TP / P, th: item.s });
+            }
+            return pts;
+        }
+
+        function computeAUC(pts) {
+            let auc = 0;
+            for (let i = 1; i < pts.length; i++) {
+                const dx = pts[i].fpr - pts[i - 1].fpr;
+                const avgH = (pts[i].tpr + pts[i - 1].tpr) / 2;
+                auc += dx * avgH;
+            }
+            return auc;
+        }
+
+        const rocPts = buildRocPoints();
+        const AUC = computeAUC(rocPts);
+
+        // ---------- Canvas 绘图 ----------
+        const canvas = document.getElementById('rocCanvas');
+        const ctx = canvas.getContext('2d');
+        const pad = { l: 55, r: 20, t: 20, b: 45 };
+        const W = canvas.width, H = canvas.height;
+
+        function xpix(v) { return pad.l + v * (W - pad.l - pad.r); }
+        function ypix(v) { return H - pad.b - v * (H - pad.t - pad.b); }
+
+        function drawRoc(curFPR, curTPR) {
+            ctx.clearRect(0, 0, W, H);
+            // 网格
+            ctx.strokeStyle = '#f2e7d0';
+            ctx.lineWidth = 1;
+            for (let g = 0; g <= 10; g++) {
+                const v = g / 10;
+                ctx.beginPath(); ctx.moveTo(xpix(v), ypix(0)); ctx.lineTo(xpix(v), ypix(1)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(xpix(0), ypix(v)); ctx.lineTo(xpix(1), ypix(v)); ctx.stroke();
+            }
+            // 随机对角线
+            ctx.strokeStyle = '#b7a78d';
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(xpix(0), ypix(0)); ctx.lineTo(xpix(1), ypix(1)); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // AUC 阴影
+            ctx.beginPath();
+            ctx.moveTo(xpix(0), ypix(0));
+            rocPts.forEach(function (p) { ctx.lineTo(xpix(p.fpr), ypix(p.tpr)); });
+            ctx.lineTo(xpix(1), ypix(0));
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(44,90,160,0.12)';
+            ctx.fill();
+
+            // ROC 曲线
+            ctx.strokeStyle = '#a05f1c';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            rocPts.forEach(function (p, i) {
+                if (i === 0) ctx.moveTo(xpix(p.fpr), ypix(p.tpr));
+                else ctx.lineTo(xpix(p.fpr), ypix(p.tpr));
+            });
+            ctx.stroke();
+
+            // 当前阈值对应的点
+            ctx.beginPath();
+            ctx.arc(xpix(curFPR), ypix(curTPR), 7, 0, Math.PI * 2);
+            ctx.fillStyle = '#e83e8c';
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 轴标签
+            ctx.fillStyle = '#3e3324';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('假阳率 FPR', (pad.l + W - pad.r) / 2, H - 8);
+            ctx.save();
+            ctx.translate(15, (pad.t + H - pad.b) / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('真阳率 TPR', 0, 0);
+            ctx.restore();
+
+            // 刻度
+            ctx.font = '11px Arial';
+            ctx.fillStyle = '#6f6049';
+            for (let g = 0; g <= 10; g += 2) {
+                const v = g / 10;
+                ctx.textAlign = 'center';
+                ctx.fillText(v.toFixed(1), xpix(v), H - pad.b + 15);
+                ctx.textAlign = 'right';
+                ctx.fillText(v.toFixed(1), pad.l - 6, ypix(v) + 4);
+            }
+        }
+
+        // ---------- 联动更新 ----------
+        function update() {
+            const th = parseFloat(slider.value);
+            document.getElementById('thresholdValue').textContent = th.toFixed(2);
+            const m = computeMatrix(th);
+            document.getElementById('vTP').textContent = m.TP;
+            document.getElementById('vFN').textContent = m.FN;
+            document.getElementById('vFP').textContent = m.FP;
+            document.getElementById('vTN').textContent = m.TN;
+            document.getElementById('vP').textContent = m.TP + m.FN;
+            document.getElementById('vN').textContent = m.FP + m.TN;
+            document.getElementById('vPredP').textContent = m.TP + m.FP;
+            document.getElementById('vPredN').textContent = m.FN + m.TN;
+
+            const total = m.TP + m.FP + m.FN + m.TN;
+            const acc = (m.TP + m.TN) / total;
+            const prec = (m.TP + m.FP) ? m.TP / (m.TP + m.FP) : 0;
+            const rec = (m.TP + m.FN) ? m.TP / (m.TP + m.FN) : 0;
+            const f1 = (prec + rec) ? 2 * prec * rec / (prec + rec) : 0;
+            const fpr = (m.FP + m.TN) ? m.FP / (m.FP + m.TN) : 0;
+
+            document.getElementById('mAcc').textContent = acc.toFixed(3);
+            document.getElementById('mPrec').textContent = prec.toFixed(3);
+            document.getElementById('mRec').textContent = rec.toFixed(3);
+            document.getElementById('mF1').textContent = f1.toFixed(3);
+            document.getElementById('mTPR').textContent = rec.toFixed(3);
+            document.getElementById('mFPR').textContent = fpr.toFixed(3);
+            document.getElementById('mAUC').textContent = AUC.toFixed(3);
+
+            drawRoc(fpr, rec);
+
+            document.getElementById('rocFormula').innerHTML =
+                '<div class="row"><span class="k">判定规则</span>：score ≥ τ 判为正例，当前 <span class="v">τ = ' + th.toFixed(2) + '</span></div>' +
+                '<div class="row"><span class="fm">TPR = TP / (TP + FN) = ' + m.TP + ' / (' + m.TP + ' + ' + m.FN + ') = <span class="v">' + rec.toFixed(3) + '</span>' +
+                '　　FPR = FP / (FP + TN) = ' + m.FP + ' / (' + m.FP + ' + ' + m.TN + ') = <span class="v">' + fpr.toFixed(3) + '</span></span></div>' +
+                '<div class="row"><span class="fm">ROC 曲线 = ｛ (FPR(τ), TPR(τ)) ｜ τ 从 1 扫到 0 ｝　　AUC = ∫ TPR d(FPR) ≈ <span class="v">' + AUC.toFixed(3) + '</span></span></div>';
+        }
+
+        slider.addEventListener('input', update);
+
+        // ---------- 单元格解释 ----------
+        const explainMap = {
+            cellTP: { t: 'TP 真正例 (True Positive)', d: '实际为正例，模型也预测为正例 —— 判对了。' },
+            cellFN: { t: 'FN 假负例 (False Negative)', d: '实际为正例，模型却预测为负例 —— 漏报（第二类错误）。' },
+            cellFP: { t: 'FP 假正例 (False Positive)', d: '实际为负例，模型却预测为正例 —— 误报（第一类错误）。' },
+            cellTN: { t: 'TN 真负例 (True Negative)', d: '实际为负例，模型也预测为负例 —— 判对了。' }
+        };
+        Object.keys(explainMap).forEach(function (id) {
+            document.getElementById(id).addEventListener('click', function () {
+                const e = explainMap[id];
+                document.getElementById('cellExplain').innerHTML =
+                    '<b style="color:#a05f1c">' + e.t + '</b>：' + e.d;
+            });
+        });
+
+        update();
+    </script>
+</body>
+</html>

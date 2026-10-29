@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神经网络 - 前向传播与反向传播</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 560px; }
+        .panel-side { flex: 1 1 340px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; }
+
+        .controls { margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-step { background-color: #d2761f; }
+        .btn-step:hover { background-color: #a85c12; }
+        .btn-run { background-color: #28a745; }
+        .btn-run:hover { background-color: #218838; }
+        .btn-reset { background-color: #dc3545; }
+        .btn-reset:hover { background-color: #c82333; }
+
+        .slider-label { font-weight: bold; color: #3e3324; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d2761f; cursor: pointer;
+        }
+
+        .dataset-row { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+        .ds-btn {
+            padding: 8px 14px;
+            font-size: 13px;
+            border: 2px solid #d2761f;
+            background: white;
+            color: #d2761f;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .ds-btn.active { background: #d2761f; color: white; }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .metric-item { text-align: center; min-width: 90px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #d2761f; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .legend { font-size: 14px; color: #4a3e2d; margin: 8px 0; }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 5px 0 12px; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>神经网络 - 前向传播与反向传播（MLP 2-8-8-1）</h1>
+
+        <div class="layout">
+            <div class="panel-main">
+                <h3>决策边界（背景色 = 网络输出，随训练动态变化）</h3>
+                <div class="chart-box"><canvas id="boundaryCanvas" width="560" height="420"></canvas>
+                    <div class="formula-strip" id="bdFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e83e8c;"></span>类别 A (y=1)
+                    <span class="dot" style="background:#4d94ff;"></span>类别 B (y=0)
+                </div>
+            </div>
+
+            <div class="panel-side">
+                <h3>网络结构（线越粗 |权重| 越大；橙=正 蓝=负）</h3>
+                <div class="chart-box"><canvas id="netCanvas" width="360" height="300"></canvas>
+                    <div class="formula-strip" id="netFormula"></div>
+                </div>
+
+                <h3>数据集</h3>
+                <div class="dataset-row">
+                    <button class="ds-btn active" data-ds="xor">异或 XOR</button>
+                    <button class="ds-btn" data-ds="circle">环形</button>
+                    <button class="ds-btn" data-ds="moons">双月牙</button>
+                </div>
+
+                <h3>控制台</h3>
+                <div class="controls">
+                    <div class="slider-label"><span>学习率</span><span id="lrValue">0.30</span></div>
+                    <input type="range" id="lrSlider" min="0.01" max="1.5" step="0.01" value="0.3">
+                    <div class="btn-row">
+                        <button class="btn-step" id="stepBtn">单步训练</button>
+                        <button class="btn-run" id="runBtn">训练 500 步</button>
+                        <button class="btn-reset" id="resetBtn">重置模型</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mLoss">--</div>
+                        <div class="metric-label">损失</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAcc">--</div>
+                        <div class="metric-label">准确率</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mEpoch">0</div>
+                        <div class="metric-label">步数</div>
+                    </div>
+                </div>
+
+                <h3>损失曲线</h3>
+                <div class="chart-box"><canvas id="lossCanvas" width="360" height="160"></canvas>
+                    <div class="formula-strip" id="nnLossFormula"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 选择数据集后点击「训练 500 步」，观察左侧决策边界如何逐步「扭曲」出非线性形状</p>
+            <p>• XOR / 环形 / 双月牙都是线性不可分数据 —— 单层感知机无能为力，多层网络轻松搞定</p>
+            <p>• 右上网络图展示权重强度与方向，训练中权重不断调整</p>
+            <p>• 学习率过大会震荡，过小收敛慢 —— 可以对比 0.05 与 1.5 的差异</p>
+        </div>
+    </div>
+
+    <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+        <div class="instructions">
+            <h3>神经网络原理（多层感知机）</h3>
+
+            <h4>前向传播</h4>
+            <p>每一层先做线性变换，再经过非线性激活（隐藏层 tanh，输出层 sigmoid）：</p>
+            <div class="formula-container">a⁽ˡ⁾ = f( W⁽ˡ⁾·a⁽ˡ⁻¹⁾ + b⁽ˡ⁾ )，　f_tanh(z) = (eᶻ − e⁻ᶻ)/(eᶻ + e⁻ᶻ)</div>
+
+            <h4>损失函数</h4>
+            <p>二分类使用二元交叉熵：</p>
+            <div class="formula-container">L = −(1/n) Σ [ yᵢ·ln(ŷᵢ) + (1−yᵢ)·ln(1−ŷᵢ) ]</div>
+
+            <h4>反向传播（链式法则）</h4>
+            <p>从输出层向输入层逐层计算梯度：</p>
+            <div class="formula-container">δ⁽ᴸ⁾ = ŷ − y　　δ⁽ˡ⁾ = (W⁽ˡ⁺¹⁾ᵀ·δ⁽ˡ⁺¹⁾) ⊙ f′(z⁽ˡ⁾)</div>
+            <div class="formula-container">∂L/∂W⁽ˡ⁾ = δ⁽ˡ⁾·(a⁽ˡ⁻¹⁾)ᵀ　　W ← W − η·∂L/∂W</div>
+            <p>隐藏层的 tanh 导数 f′(z) = 1 − tanh²(z)。"深度"的意义在于：多层非线性叠加可以逼近任意复杂的决策边界（万能逼近定理）。</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ================= 数据集 =================
+        let seed = 99;
+        function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+        function gauss() {
+            let u = 0, v = 0;
+            while (u === 0) u = rand();
+            while (v === 0) v = rand();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+
+        function makeDataset(kind) {
+            const pts = [];
+            if (kind === 'xor') {
+                for (let i = 0; i < 120; i++) {
+                    const x1 = (rand() * 2 - 1) * 4;
+                    const x2 = (rand() * 2 - 1) * 4;
+                    if (Math.abs(x1) < 0.35 || Math.abs(x2) < 0.35) continue;
+                    const y = (x1 * x2 > 0) ? 1 : 0;
+                    pts.push({ x: [x1, x2], y: y });
+                }
+            } else if (kind === 'circle') {
+                for (let i = 0; i < 60; i++) {
+                    const r = rand() * 1.6, a = rand() * Math.PI * 2;
+                    pts.push({ x: [r * Math.cos(a) + gauss() * 0.12, r * Math.sin(a) + gauss() * 0.12], y: 1 });
+                }
+                for (let i = 0; i < 80; i++) {
+                    const r = 3.2 + rand() * 1.2, a = rand() * Math.PI * 2;
+                    pts.push({ x: [r * Math.cos(a) + gauss() * 0.15, r * Math.sin(a) + gauss() * 0.15], y: 0 });
+                }
+            } else {
+                for (let i = 0; i < 100; i++) {
+                    const t = rand() * Math.PI;
+                    pts.push({ x: [2 * Math.cos(t) + gauss() * 0.25, 1.4 * Math.sin(t) - 0.5 + gauss() * 0.25], y: 1 });
+                }
+                for (let i = 0; i < 100; i++) {
+                    const t = rand() * Math.PI;
+                    pts.push({ x: [2 - 2 * Math.cos(t) + gauss() * 0.25, 0.5 - 1.4 * Math.sin(t) + gauss() * 0.25], y: 0 });
+                }
+            }
+            return pts;
+        }
+
+        let datasetKind = 'xor';
+        let points = makeDataset(datasetKind);
+
+        // ================= MLP 实现 =================
+        const SIZES = [2, 8, 8, 1];
+        let W = [], bvec = [], epoch = 0, lossHistory = [];
+
+        function initNet() {
+            W = []; bvec = []; epoch = 0; lossHistory = [];
+            for (let l = 1; l < SIZES.length; l++) {
+                const rows = SIZES[l], cols = SIZES[l - 1];
+                const w = [];
+                for (let r = 0; r < rows; r++) {
+                    const row = [];
+                    for (let c = 0; c < cols; c++) row.push((rand() * 2 - 1) * Math.sqrt(2 / cols));
+                    w.push(row);
+                }
+                W.push(w);
+                const bv = [];
+                for (let r = 0; r < rows; r++) bv.push(0);
+                bvec.push(bv);
+            }
+        }
+
+        function tanh(z) { return Math.tanh(z); }
+
+        // 前向，缓存每层激活
+        function forward(x) {
+            const acts = [x];
+            let a = x;
+            for (let l = 0; l < W.length; l++) {
+                const z = [];
+                for (let r = 0; r < W[l].length; r++) {
+                    let s = bvec[l][r];
+                    for (let c = 0; c < a.length; c++) s += W[l][r][c] * a[c];
+                    z.push(s);
+                }
+                if (l === W.length - 1) {
+                    a = z.map(sigmoidSafe);
+                } else {
+                    a = z.map(tanh);
+                }
+                acts.push(a);
+            }
+            return acts;
+        }
+
+        function sigmoidSafe(z) {
+            if (z >= 0) return 1 / (1 + Math.exp(-z));
+            const ez = Math.exp(z);
+            return ez / (1 + ez);
+        }
+
+        function computeLossAcc() {
+            let loss = 0, correct = 0;
+            points.forEach(function (p) {
+                const out = forward(p.x)[W.length][0];
+                const oc = Math.min(Math.max(out, 1e-9), 1 - 1e-9);
+                loss += -(p.y * Math.log(oc) + (1 - p.y) * Math.log(1 - oc));
+                if ((out >= 0.5 ? 1 : 0) === p.y) correct++;
+            });
+            return { loss: loss / points.length, acc: correct / points.length };
+        }
+
+        function trainStep(lr) {
+            // 批量梯度累积
+            const gW = W.map(w => w.map(row => row.map(() => 0)));
+            const gB = bvec.map(bv => bv.map(() => 0));
+            let loss = 0;
+
+            points.forEach(function (p) {
+                const acts = forward(p.x);
+                const out = acts[W.length][0];
+                const oc = Math.min(Math.max(out, 1e-9), 1 - 1e-9);
+                loss += -(p.y * Math.log(oc) + (1 - p.y) * Math.log(1 - oc));
+
+                // 输出层 delta（sigmoid + 交叉熵 => out - y）
+                let delta = [out - p.y];
+                for (let l = W.length - 1; l >= 0; l--) {
+                    const aPrev = acts[l];
+                    for (let r = 0; r < delta.length; r++) {
+                        gB[l][r] += delta[r];
+                        for (let c = 0; c < aPrev.length; c++) gW[l][r][c] += delta[r] * aPrev[c];
+                    }
+                    if (l > 0) {
+                        const newDelta = [];
+                        for (let c = 0; c < aPrev.length; c++) {
+                            let s = 0;
+                            for (let r = 0; r < delta.length; r++) s += W[l][r][c] * delta[r];
+                            const a = aPrev[c];
+                            newDelta.push(s * (1 - a * a)); // tanh 导数
+                        }
+                        delta = newDelta;
+                    }
+                }
+            });
+
+            const n = points.length;
+            for (let l = 0; l < W.length; l++) {
+                for (let r = 0; r < W[l].length; r++) {
+                    for (let c = 0; c < W[l][r].length; c++) W[l][r][c] -= lr * gW[l][r][c] / n;
+                    bvec[l][r] -= lr * gB[l][r] / n;
+                }
+            }
+            epoch++;
+            loss /= n;
+            lossHistory.push(loss);
+            if (lossHistory.length > 600) lossHistory.shift();
+        }
+
+        // ================= 决策边界绘制 =================
+        const bCanvas = document.getElementById('boundaryCanvas');
+        const bctx = bCanvas.getContext('2d');
+        const BW = bCanvas.width, BH = bCanvas.height;
+        const VMIN = -5, VMAX = 5;
+
+        function bx(v) { return (v - VMIN) / (VMAX - VMIN) * BW; }
+        function by(v) { return BH - (v - VMIN) / (VMAX - VMIN) * BH; }
+
+        function drawBoundary() {
+            const cell = 14;
+            for (let px = 0; px < BW; px += cell) {
+                for (let py = 0; py < BH; py += cell) {
+                    const vx = VMIN + (px + cell / 2) / BW * (VMAX - VMIN);
+                    const vy = VMIN + (BH - py - cell / 2) / BH * (VMAX - VMIN);
+                    const out = forward([vx, vy])[W.length][0];
+                    const alpha = Math.abs(out - 0.5) * 2 * 0.4;
+                    bctx.fillStyle = out >= 0.5
+                        ? 'rgba(232,62,140,' + alpha.toFixed(3) + ')'
+                        : 'rgba(77,148,255,' + alpha.toFixed(3) + ')';
+                    bctx.fillRect(px, py, cell, cell);
+                }
+            }
+            // 数据点
+            points.forEach(function (p) {
+                bctx.beginPath();
+                bctx.arc(bx(p.x[0]), by(p.x[1]), 5.5, 0, Math.PI * 2);
+                bctx.fillStyle = p.y === 1 ? '#e83e8c' : '#4d94ff';
+                bctx.fill();
+                bctx.strokeStyle = 'white';
+                bctx.lineWidth = 1.5;
+                bctx.stroke();
+            });
+            // 坐标
+            bctx.strokeStyle = 'rgba(0,0,0,0.3)';
+            bctx.beginPath(); bctx.moveTo(bx(VMIN), by(0)); bctx.lineTo(bx(VMAX), by(0)); bctx.stroke();
+            bctx.beginPath(); bctx.moveTo(bx(0), by(VMIN)); bctx.lineTo(bx(0), by(VMAX)); bctx.stroke();
+        }
+
+        // ================= 网络结构绘制 =================
+        const nCanvas = document.getElementById('netCanvas');
+        const nctx = nCanvas.getContext('2d');
+
+        function drawNetwork() {
+            nctx.clearRect(0, 0, nCanvas.width, nCanvas.height);
+            const layerX = [];
+            for (let l = 0; l < SIZES.length; l++) {
+                layerX.push(40 + l / (SIZES.length - 1) * (nCanvas.width - 100));
+            }
+            const pos = [];
+            for (let l = 0; l < SIZES.length; l++) {
+                const n = SIZES[l];
+                const arr = [];
+                for (let i = 0; i < n; i++) {
+                    arr.push({
+                        x: layerX[l],
+                        y: nCanvas.height / 2 + (i - (n - 1) / 2) * Math.min(32, (nCanvas.height - 40) / n)
+                    });
+                }
+                pos.push(arr);
+            }
+            // 连接线
+            for (let l = 0; l < W.length; l++) {
+                for (let r = 0; r < W[l].length; r++) {
+                    for (let c = 0; c < W[l][r].length; c++) {
+                        const wgt = W[l][r][c];
+                        const maxW = 2.5;
+                        nctx.strokeStyle = wgt >= 0
+                            ? 'rgba(232,119,34,' + Math.min(Math.abs(wgt) / maxW, 0.85).toFixed(2) + ')'
+                            : 'rgba(52,120,246,' + Math.min(Math.abs(wgt) / maxW, 0.85).toFixed(2) + ')';
+                        nctx.lineWidth = Math.min(Math.abs(wgt) * 1.6, 4);
+                        nctx.beginPath();
+                        nctx.moveTo(pos[l][c].x, pos[l][c].y);
+                        nctx.lineTo(pos[l + 1][r].x, pos[l + 1][r].y);
+                        nctx.stroke();
+                    }
+                }
+            }
+            // 节点
+            pos.forEach(function (layer) {
+                layer.forEach(function (p) {
+                    nctx.beginPath();
+                    nctx.arc(p.x, p.y, 9, 0, Math.PI * 2);
+                    nctx.fillStyle = '#f8f0df';
+                    nctx.fill();
+                    nctx.strokeStyle = '#7e6c52';
+                    nctx.lineWidth = 1.4;
+                    nctx.stroke();
+                });
+            });
+            nctx.fillStyle = '#6f6049';
+            nctx.font = '11px Arial';
+            nctx.textAlign = 'center';
+            nctx.fillText('输入 (x₁,x₂)', layerX[0], 14);
+            nctx.fillText('隐藏层 8 (tanh)', layerX[1], 14);
+            nctx.fillText('隐藏层 8 (tanh)', layerX[2], 14);
+            nctx.fillText('输出 σ', layerX[3], 14);
+        }
+
+        // ================= 损失曲线 =================
+        const lCanvas = document.getElementById('lossCanvas');
+        const lctx = lCanvas.getContext('2d');
+
+        function drawLoss() {
+            lctx.clearRect(0, 0, lCanvas.width, lCanvas.height);
+            if (lossHistory.length < 2) return;
+            const maxL = Math.max.apply(null, lossHistory);
+            const minL = Math.min.apply(null, lossHistory);
+            const span = Math.max(maxL - minL, 1e-6);
+            lctx.strokeStyle = '#e83e8c';
+            lctx.lineWidth = 2;
+            lctx.beginPath();
+            lossHistory.forEach(function (v, i) {
+                const x = i / (lossHistory.length - 1) * (lCanvas.width - 20) + 10;
+                const y = lCanvas.height - 16 - (v - minL) / span * (lCanvas.height - 30);
+                if (i === 0) lctx.moveTo(x, y); else lctx.lineTo(x, y);
+            });
+            lctx.stroke();
+            lctx.fillStyle = '#6f6049';
+            lctx.font = '11px Arial';
+            lctx.fillText('当前 loss = ' + lossHistory[lossHistory.length - 1].toFixed(4), 12, 14);
+        }
+
+        // ================= UI =================
+        function updateUI() {
+            const m = computeLossAcc();
+            document.getElementById('mLoss').textContent = m.loss.toFixed(4);
+            document.getElementById('mAcc').textContent = (m.acc * 100).toFixed(1) + '%';
+            document.getElementById('mEpoch').textContent = epoch;
+
+            let nParam = 0;
+            for (let l = 1; l < SIZES.length; l++) nParam += SIZES[l] * SIZES[l - 1] + SIZES[l];
+            document.getElementById('bdFormula').innerHTML =
+                '<div class="row"><span class="k">前向传播</span>：<span class="fm">z⁽ˡ⁾ = W⁽ˡ⁾·a⁽ˡ⁻¹⁾ + b⁽ˡ⁾，　a⁽ˡ⁾ = tanh(z⁽ˡ⁾)　（隐藏层）</span></div>' +
+                '<div class="row"><span class="k">输出层</span>：<span class="fm">ŷ = σ(z⁽ᴸ⁾) = 1 / (1 + e⁻ᶻ)</span>　<span style="color:#8a755a">背景色深浅 = ŷ 大小，白线 = ŷ = 0.5 决策边界</span></div>' +
+                '<div class="row"><span class="k">网络</span>：<span class="v">' + SIZES.join(' → ') + '</span>　可训练参数 <span class="v">' + nParam + '</span> 个　→ 当前准确率 <span class="v">' + (m.acc * 100).toFixed(1) + '%</span></div>';
+
+            document.getElementById('netFormula').innerHTML =
+                '<div class="row"><span class="k">误差反传</span>：<span class="fm">δ⁽ᴸ⁾ = ŷ − y，　δ⁽ˡ⁾ = ( W⁽ˡ⁺¹⁾ᵀ·δ⁽ˡ⁺¹⁾ ) ⊙ ( 1 − tanh²(z⁽ˡ⁾) )</span></div>' +
+                '<div class="row"><span class="k">权重更新</span>：<span class="fm">W⁽ˡ⁾ ← W⁽ˡ⁾ − η·δ⁽ˡ⁾·(a⁽ˡ⁻¹⁾)ᵀ，　b⁽ˡ⁾ ← b⁽ˡ⁾ − η·δ⁽ˡ⁾</span></div>' +
+                '<div class="row"><span style="color:#8a755a">线条粗细 = |权重|，橙=正 / 蓝=负；每步训练都会重画这里的连线</span></div>';
+
+            document.getElementById('nnLossFormula').innerHTML =
+                '<div class="row"><span class="k">交叉熵损失</span>：<span class="fm">J = −(1/n)·Σ [ yᵢ·ln ŷᵢ + (1−yᵢ)·ln(1−ŷᵢ) ] = <span class="v">' + m.loss.toFixed(4) + '</span></span></div>' +
+                '<div class="row"><span class="fm">学习率 η = <span class="v">' + parseFloat(document.getElementById('lrSlider').value).toFixed(2) + '</span>　　epoch = <span class="v">' + epoch + '</span></span></div>';
+
+            drawBoundary();
+            drawNetwork();
+            drawLoss();
+        }
+
+        const lrSlider = document.getElementById('lrSlider');
+        lrSlider.addEventListener('input', function () {
+            document.getElementById('lrValue').textContent = parseFloat(lrSlider.value).toFixed(2);
+        });
+
+        document.getElementById('stepBtn').addEventListener('click', function () {
+            trainStep(parseFloat(lrSlider.value));
+            updateUI();
+        });
+
+        document.getElementById('runBtn').addEventListener('click', function () {
+            const lr = parseFloat(lrSlider.value);
+            for (let i = 0; i < 500; i++) trainStep(lr);
+            updateUI();
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', function () {
+            initNet();
+            updateUI();
+        });
+
+        document.querySelectorAll('.ds-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.ds-btn').forEach(function (b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                datasetKind = btn.getAttribute('data-ds');
+                seed = datasetKind === 'xor' ? 99 : (datasetKind === 'circle' ? 55 : 77);
+                points = makeDataset(datasetKind);
+                initNet();
+                updateUI();
+            });
+        });
+
+        initNet();
+        updateUI();
+    </script>
+</body>
+</html>

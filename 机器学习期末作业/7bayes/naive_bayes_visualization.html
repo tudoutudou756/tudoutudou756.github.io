@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>朴素贝叶斯 - 概率密度与后验决策</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 580px; }
+        .panel-side { flex: 1 1 340px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; }
+
+        .feature-row { margin: 12px 0; }
+        .slider-label { font-weight: bold; color: #3e3324; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d2761f; cursor: pointer;
+        }
+
+        .posterior-box {
+            display: flex;
+            height: 46px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid #d9c9ac;
+            font-weight: bold;
+            color: white;
+            text-align: center;
+            line-height: 46px;
+            font-size: 15px;
+            margin: 15px 0;
+        }
+        .posterior-box div { transition: width 0.4s ease; }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .metric-item { text-align: center; min-width: 90px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #d2761f; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .legend { font-size: 14px; color: #4a3e2d; margin: 8px 0; }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 5px 0 12px; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>朴素贝叶斯 - 概率密度与后验决策</h1>
+
+        <div class="layout">
+            <div class="panel-main">
+                <h3>特征空间（移动十字光标观察后验概率变化）</h3>
+                <div class="chart-box"><canvas id="bayesCanvas" width="600" height="440"></canvas>
+                    <div class="formula-strip" id="bayesFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e8590c;"></span>类别 A：山鸢尾 (setosa)
+                    <span class="dot" style="background:#2f9e44;"></span>类别 B：变色鸢尾 (versicolor)
+                    <span class="dot" style="background:#4263eb;"></span>类别 C：维吉尼亚鸢尾 (virginica)
+                </div>
+            </div>
+
+            <div class="panel-side">
+                <h3>待分类样本（拖动滑块设置特征）</h3>
+                <div class="feature-row">
+                    <div class="slider-label"><span>花萼长度 (cm)</span><span id="f0Value">5.8</span></div>
+                    <input type="range" id="f0Slider" min="4.0" max="8.0" step="0.05" value="5.8">
+                </div>
+                <div class="feature-row">
+                    <div class="slider-label"><span>花萼宽度 (cm)</span><span id="f1Value">3.0</span></div>
+                    <input type="range" id="f1Slider" min="2.0" max="4.5" step="0.05" value="3.0">
+                </div>
+
+                <h3>后验概率（归一化后）</h3>
+                <div class="posterior-box">
+                    <div id="postA" style="background:#e8590c; width:33%;">A 33%</div>
+                    <div id="postB" style="background:#2f9e44; width:34%;">B 34%</div>
+                    <div id="postC" class="post-c" style="background:#4263eb; width:33%;">C 33%</div>
+                </div>
+
+                <h3>各类别的似然（高斯）</h3>
+                <div class="chart-box"><canvas id="distCanvas" width="380" height="230"></canvas>
+                    <div class="formula-strip" id="distFormula"></div>
+                </div>
+
+                <div class="metrics" style="margin-top:12px;">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mPred">--</div>
+                        <div class="metric-label">预测类别</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mConf">--</div>
+                        <div class="metric-label">置信度</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAcc">--</div>
+                        <div class="metric-label">训练准确率</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 拖动右侧滑块设置一朵花的两个特征，后验概率条实时变化</p>
+            <p>• 左图中移动的十字光标即为当前样本位置；背景色深浅表示该位置的预测置信度</p>
+            <p>• 中部似然曲线显示每个类别对当前特征值的「解释能力」，两处峰值乘积最大的类别获胜</p>
+            <p>• 注意「朴素」假设：所有特征条件独立，因此似然可以直接相乘 —— 真实数据未必满足，但效果往往仍然不错</p>
+        </div>
+    </div>
+
+    <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+        <div class="instructions">
+            <h3>朴素贝叶斯原理</h3>
+
+            <h4>贝叶斯定理</h4>
+            <div class="formula-container">P(y|x₁,…,xₙ) = P(y) · P(x₁,…,xₙ|y) / P(x₁,…,xₙ)</div>
+            <p>后验 ∝ 先验 × 似然。分类时选择使后验最大的类别（MAP 决策）。</p>
+
+            <h4>「朴素」条件独立假设</h4>
+            <div class="formula-container">P(x₁,…,xₙ|y) ≈ Πⱼ P(xⱼ|y)</div>
+            <p>把高维联合密度拆成一维密度的乘积，大幅降低估计难度 —— 这是「朴素」二字的含义。</p>
+
+            <h4>高斯朴素贝叶斯</h4>
+            <p>连续特征假设每个类别内服从一维正态分布：</p>
+            <div class="formula-container">P(xⱼ|y=c) = (1/√(2πσ²ⱼc)) · exp(−(xⱼ−μⱼc)² / (2σ²ⱼc))</div>
+            <p>训练只需估计每个类别的先验 P(y=c) 与各特征的 μ、σ²；预测时对每个类别累加对数似然取最大者。决策边界是二次曲线（特征空间中被分段二次曲面切开）。</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ================= 鸢尾花数据（真实测量均值生成的高斯样本） =================
+        let seed = 88;
+        function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+        function gauss() {
+            let u = 0, v = 0;
+            while (u === 0) u = rand();
+            while (v === 0) v = rand();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+
+        // [花萼长度, 花萼宽度]，真实鸢尾统计量
+        const species = [
+            { name: 'A 山鸢尾', color: '#e8590c', mu: [5.006, 3.428], sd: [0.352, 0.379], prior: 1 / 3 },
+            { name: 'B 变色鸢尾', color: '#2f9e44', mu: [5.936, 2.770], sd: [0.516, 0.314], prior: 1 / 3 },
+            { name: 'C 维吉尼亚鸢尾', color: '#4263eb', mu: [6.588, 2.974], sd: [0.636, 0.322], prior: 1 / 3 }
+        ];
+
+        const data = [];
+        species.forEach(function (sp, ci) {
+            for (let i = 0; i < 50; i++) {
+                data.push({
+                    f: [
+                        Math.min(8.2, Math.max(3.8, sp.mu[0] + gauss() * sp.sd[0])),
+                        Math.min(4.6, Math.max(1.9, sp.mu[1] + gauss() * sp.sd[1]))
+                    ],
+                    y: ci
+                });
+            }
+        });
+
+        // 训练：直接用理论参数（也是从数据估计的），可计算训练准确率
+        function logGauss(x, mu, sd) {
+            return -Math.log(sd) - 0.5 * Math.log(2 * Math.PI) - (x - mu) * (x - mu) / (2 * sd * sd);
+        }
+
+        function posterior(f) {
+            const scores = species.map(function (sp) {
+                let s = Math.log(sp.prior);
+                s += logGauss(f[0], sp.mu[0], sp.sd[0]);
+                s += logGauss(f[1], sp.mu[1], sp.sd[1]);
+                return s;
+            });
+            const maxS = Math.max.apply(null, scores);
+            const exps = scores.map(function (s) { return Math.exp(s - maxS); });
+            const sum = exps.reduce(function (a, b) { return a + b; }, 0);
+            return exps.map(function (e) { return e / sum; });
+        }
+
+        function trainAcc() {
+            let correct = 0;
+            data.forEach(function (d) {
+                const p = posterior(d.f);
+                let best = 0;
+                for (let i = 1; i < 3; i++) if (p[i] > p[best]) best = i;
+                if (best === d.y) correct++;
+            });
+            return correct / data.length;
+        }
+
+        // ================= 主图 =================
+        const canvas = document.getElementById('bayesCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        const XMIN = 3.8, XMAX = 8.2, YMIN = 1.9, YMAX = 4.6;
+
+        function px(v) { return (v - XMIN) / (XMAX - XMIN) * W; }
+        function py(v) { return H - (v - YMIN) / (YMAX - YMIN) * H; }
+
+        function drawMain(curF) {
+            ctx.clearRect(0, 0, W, H);
+            // 背景置信度
+            const cell = 15;
+            for (let x = 0; x < W; x += cell) {
+                for (let y = 0; y < H; y += cell) {
+                    const vx = XMIN + (x + cell / 2) / W * (XMAX - XMIN);
+                    const vy = YMIN + (H - y - cell / 2) / H * (YMAX - YMIN);
+                    const p = posterior([vx, vy]);
+                    let best = 0;
+                    for (let i = 1; i < 3; i++) if (p[i] > p[best]) best = i;
+                    const conf = (p[best] - 1 / 3) / (2 / 3);
+                    ctx.fillStyle = species[best].color;
+                    ctx.globalAlpha = 0.10 + 0.30 * Math.max(conf, 0);
+                    ctx.fillRect(x, y, cell, cell);
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // 数据点
+            data.forEach(function (d) {
+                ctx.beginPath();
+                ctx.arc(px(d.f[0]), py(d.f[1]), 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = species[d.y].color;
+                ctx.globalAlpha = 0.7;
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // 当前样本十字光标
+            if (curF) {
+                ctx.strokeStyle = '#2f261a';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(px(curF[0]) - 16, py(curF[1]));
+                ctx.lineTo(px(curF[0]) + 16, py(curF[1]));
+                ctx.moveTo(px(curF[0]), py(curF[1]) - 16);
+                ctx.lineTo(px(curF[0]), py(curF[1]) + 16);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(px(curF[0]), py(curF[1]), 6, 0, Math.PI * 2);
+                ctx.strokeStyle = '#2f261a';
+                ctx.stroke();
+            }
+
+            // 坐标轴
+            ctx.strokeStyle = '#3e3324';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(40, 10); ctx.lineTo(40, H - 30); ctx.lineTo(W - 10, H - 30);
+            ctx.stroke();
+            ctx.fillStyle = '#584a36';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('花萼长度 (cm) →', W / 2, H - 8);
+            ctx.save();
+            ctx.translate(13, H / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('花萼宽度 (cm) →', 0, 0);
+            ctx.restore();
+            ctx.font = '10px Arial';
+            for (let v = 4; v <= 8; v++) {
+                ctx.fillText(v.toFixed(0), px(v), H - 18);
+            }
+        }
+
+        // ================= 似然曲线 =================
+        const dCanvas = document.getElementById('distCanvas');
+        const dctx = dCanvas.getContext('2d');
+        const DW = dCanvas.width, DH = dCanvas.height;
+
+        function drawDist(curF) {
+            dctx.clearRect(0, 0, DW, DH);
+            dctx.strokeStyle = '#f2e7d0';
+            dctx.strokeRect(0.5, 0.5, DW - 1, DH - 1);
+
+            const featIdx = 0; // 展示花萼长度维度
+            let maxD = 0;
+            const curves = species.map(function (sp) {
+                const pts = [];
+                for (let x = XMIN; x <= XMAX; x += 0.05) {
+                    const d = Math.exp(logGauss(x, sp.mu[featIdx], sp.sd[featIdx]));
+                    pts.push([x, d]);
+                    if (d > maxD) maxD = d;
+                }
+                return pts;
+            });
+
+            curves.forEach(function (pts, ci) {
+                dctx.strokeStyle = species[ci].color;
+                dctx.lineWidth = 2.2;
+                dctx.beginPath();
+                pts.forEach(function (pt, i) {
+                    const x = (pt[0] - XMIN) / (XMAX - XMIN) * (DW - 20) + 10;
+                    const y = DH - 20 - pt[1] / maxD * (DH - 40);
+                    if (i === 0) dctx.moveTo(x, y); else dctx.lineTo(x, y);
+                });
+                dctx.stroke();
+            });
+
+            // 当前值竖线
+            if (curF) {
+                const x = (curF[featIdx] - XMIN) / (XMAX - XMIN) * (DW - 20) + 10;
+                dctx.strokeStyle = '#2f261a';
+                dctx.lineWidth = 2;
+                dctx.setLineDash([5, 4]);
+                dctx.beginPath();
+                dctx.moveTo(x, 10);
+                dctx.lineTo(x, DH - 20);
+                dctx.stroke();
+                dctx.setLineDash([]);
+            }
+
+            dctx.fillStyle = '#6f6049';
+            dctx.font = '11px Arial';
+            dctx.textAlign = 'center';
+            dctx.fillText('P(花萼长度|类别) 高斯似然（虚线 = 当前样本）', DW / 2, DH - 6);
+        }
+
+        // ================= UI =================
+        const sliders = [document.getElementById('f0Slider'), document.getElementById('f1Slider')];
+
+        function update() {
+            const f = [parseFloat(sliders[0].value), parseFloat(sliders[1].value)];
+            document.getElementById('f0Value').textContent = f[0].toFixed(2);
+            document.getElementById('f1Value').textContent = f[1].toFixed(2);
+
+            const p = posterior(f);
+            const total = p[0] + p[1] + p[2];
+            const pa = p[0] / total * 100, pb = p[1] / total * 100, pc = p[2] / total * 100;
+            const elA = document.getElementById('postA');
+            const elB = document.getElementById('postB');
+            const elC = document.getElementById('postC');
+            elA.style.width = pa.toFixed(1) + '%';
+            elB.style.width = pb.toFixed(1) + '%';
+            elC.style.width = pc.toFixed(1) + '%';
+            elA.textContent = 'A ' + pa.toFixed(0) + '%';
+            elB.textContent = 'B ' + pb.toFixed(0) + '%';
+            elC.textContent = 'C ' + pc.toFixed(0) + '%';
+
+            let best = 0;
+            for (let i = 1; i < 3; i++) if (p[i] > p[best]) best = i;
+            document.getElementById('mPred').textContent = species[best].name.split(' ')[0];
+            document.getElementById('mPred').style.color = species[best].color;
+            document.getElementById('mConf').textContent = (p[best] * 100).toFixed(1) + '%';
+            document.getElementById('mAcc').textContent = (trainAcc() * 100).toFixed(1) + '%';
+
+            const postStr = species.map(function (sp, i) {
+                return '<span style="color:' + sp.color + '; font-weight:700">' + sp.name.split(' ')[0] + '</span> = <span class="v">' + (p[i] * 100).toFixed(1) + '%</span>';
+            }).join('　');
+            document.getElementById('bayesFormula').innerHTML =
+                '<div class="row"><span class="k">贝叶斯公式</span>：<span class="fm">P(y=c | x) = P(y=c)·P(x | y=c) / P(x)，　预测 ŷ = argmax<sub>c</sub> P(y=c | x)</span></div>' +
+                '<div class="row"><span class="k">条件独立假设</span>：<span class="fm">P(x | y=c) = Π<sub>j</sub> P(x<sub>j</sub> | y=c)　→　ln P(y=c|x) ∝ ln P(y=c) + Σ<sub>j</sub> ln N(x<sub>j</sub>; μ<sub>cj</sub>, σ<sub>cj</sub>²)</span></div>' +
+                '<div class="row"><span class="k">当前样本</span> <span class="fm">x = (' + f[0].toFixed(2) + ', ' + f[1].toFixed(2) + ')</span>　后验：' + postStr + '</div>';
+
+            document.getElementById('distFormula').innerHTML =
+                '<div class="row"><span class="k">类条件密度（沿花萼长度方向）</span>：<span class="fm">P(x<sub>j</sub> | y=c) = N(x<sub>j</sub>; μ<sub>cj</sub>, σ<sub>cj</sub>²) = 1/(√2π·σ<sub>cj</sub>) · exp( −(x<sub>j</sub> − μ<sub>cj</sub>)² / (2σ<sub>cj</sub>²) )</span></div>' +
+                '<div class="row">' + species.map(function (sp) {
+                    return '<span style="color:' + sp.color + '; font-weight:700">' + sp.name.split(' ')[0] + '</span> <span class="fm">μ = <span class="v">' + sp.mu[0].toFixed(2) + '</span>　σ = <span class="v">' + sp.sd[0].toFixed(2) + '</span></span>';
+                }).join('　') + '</div>';
+
+            drawMain(f);
+            drawDist(f);
+        }
+
+        sliders.forEach(function (s) { s.addEventListener('input', update); });
+        update();
+    </script>
+</body>
+</html>

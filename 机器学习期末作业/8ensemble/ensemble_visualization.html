@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>集成学习 - Bagging与Boosting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-col { flex: 1 1 420px; }
+        .panel-title { text-align: center; font-weight: bold; color: #a05f1c; font-size: 1.1em; margin-bottom: 8px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; margin: 0 auto; }
+
+        .controls { text-align: center; margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+        button {
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-add { background-color: #28a745; }
+        .btn-add:hover { background-color: #218838; }
+        .btn-auto { background-color: #d2761f; }
+        .btn-auto:hover { background-color: #a85c12; }
+        .btn-reset { background-color: #dc3545; }
+        .btn-reset:hover { background-color: #c82333; }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            margin-top: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .metric-item { text-align: center; min-width: 80px; }
+        .metric-value { font-size: 1.1em; font-weight: bold; color: #a05f1c; }
+        .metric-label { font-size: 0.82em; color: #6f6049; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .legend { font-size: 13px; color: #4a3e2d; margin: 6px 0; text-align: center; }
+        .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin: 0 4px 0 10px; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>集成学习 - Bagging（随机森林）与 Boosting（AdaBoost）</h1>
+
+        <div class="controls">
+            <button class="btn-add" id="addBtn">各添加 10 个学习器</button>
+            <button class="btn-auto" id="autoBtn">一键加到 40 个</button>
+            <button class="btn-reset" id="resetBtn">重置</button>
+            <span style="margin-left:15px; color:#6f6049;">基学习器：深度 2 的决策树桩</span>
+        </div>
+
+        <div class="layout">
+            <div class="panel-col">
+                <div class="panel-title">Bagging - 随机森林（并行 + 有放回抽样）</div>
+                <div class="chart-box"><canvas id="bagCanvas" width="480" height="380"></canvas>
+                    <div class="formula-strip" id="bagFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e83e8c;"></span>类别 A
+                    <span class="dot" style="background:#4d94ff;"></span>类别 B
+                    <span style="margin-left:8px;">背景 = 集成投票结果</span>
+                </div>
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="bagCount">0</div>
+                        <div class="metric-label">学习器数</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="bagAcc">--</div>
+                        <div class="metric-label">集成准确率</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="bagSingle">--</div>
+                        <div class="metric-label">单棵平均准确率</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-col">
+                <div class="panel-title">Boosting - AdaBoost（串行 + 加权纠错）</div>
+                <div class="chart-box"><canvas id="boostCanvas" width="480" height="380"></canvas>
+                    <div class="formula-strip" id="boostFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e83e8c;"></span>类别 A
+                    <span class="dot" style="background:#4d94ff;"></span>类别 B
+                    <span style="margin-left:8px;">点越大 = 权重越高（上一轮分错）</span>
+                </div>
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="boostCount">0</div>
+                        <div class="metric-label">学习器数</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="boostAcc">--</div>
+                        <div class="metric-label">集成准确率</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="boostSingle">--</div>
+                        <div class="metric-label">最新单棵准确率</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 反复点击「各添加 10 个学习器」，观察左右两个集成的边界如何越来越细腻</p>
+            <p>• 左侧 Bagging：每棵树用有放回抽样的自助数据集训练，互相独立，最后多数投票</p>
+            <p>• 右侧 AdaBoost：每轮提高上一轮分错样本的权重（点会变大），新树专注纠错，加权投票</p>
+            <p>• 对比两列指标：Bagging 靠「集体稳定」降方差，Boosting 靠「逐步纠错」降偏差</p>
+        </div>
+    </div>
+
+    <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+        <div class="instructions">
+            <h3>集成学习原理</h3>
+
+            <h4>Bagging（Bootstrap Aggregating）</h4>
+            <p>对 n 个样本有放回抽样 n 次构成自助数据集，独立训练多个学习器，预测时投票（回归取平均）：</p>
+            <div class="formula-container">H(x) = argmaxₖ Σᵢ 𝟙(hᵢ(x) = k)，约 63.2% 的原始样本会进入某个自助集</div>
+            <p>个体独立 → 方差降低：Var(avg) = σ²/m。随机森林在此基础上还对特征做随机子集采样，进一步降低个体相关性。</p>
+
+            <h4>AdaBoost</h4>
+            <p>串行训练：第 t 轮根据错误率 εₜ 更新样本权重，分错的样本权重放大：</p>
+            <div class="formula-container">αₜ = ½·ln((1−εₜ)/εₜ)　　wᵢ ← wᵢ·exp(αₜ·𝟙(hᵢ(xᵢ)≠yᵢ))</div>
+            <div class="formula-container">H(x) = sign( Σₜ αₜ·hₜ(x) )</div>
+            <p>易分样本权重衰减、难分样本权重上升，每一棵新树都在补前人的短板；最终加权组合，训练误差指数下降。</p>
+
+            <h4>两者对比</h4>
+            <p>Bagging 并行、个体无强弱、面向方差大的模型（深树）；Boosting 串行、个体有权重、面向偏差大的弱模型（树桩）。数据有噪声时 Bagging 更稳，追求极限精度时 Boosting 常更强。</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ================= 数据：双月牙 =================
+        let seed = 15;
+        function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+        function gauss() {
+            let u = 0, v = 0;
+            while (u === 0) u = rand();
+            while (v === 0) v = rand();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+
+        const points = (function () {
+            const pts = [];
+            for (let i = 0; i < 90; i++) {
+                const t = rand() * Math.PI;
+                pts.push({ x: [2.2 * Math.cos(t) + gauss() * 0.22, 1.5 * Math.sin(t) - 0.4 + gauss() * 0.22], y: 1 });
+            }
+            for (let i = 0; i < 90; i++) {
+                const t = rand() * Math.PI;
+                pts.push({ x: [2.2 - 2.2 * Math.cos(t) + gauss() * 0.22, 0.6 - 1.5 * Math.sin(t) + gauss() * 0.22], y: 0 });
+            }
+            return pts;
+        })();
+
+        // ================= 深度2决策树桩 =================
+        function giniOf(labels, idx) {
+            let c1 = 0;
+            for (const i of idx) if (labels[i] === 1) c1++;
+            const p = c1 / idx.length;
+            return 1 - p * p - (1 - p) * (1 - p);
+        }
+
+        // 训练一棵最大深度 depth 的轴平行决策树，支持样本权重
+        function trainStump(depth) {
+            const idxAll = points.map((_, i) => i);
+            const node = buildNode(idxAll, 0);
+            return node;
+
+            function buildNode(idx, d) {
+                // 多数类
+                let c1 = 0;
+                for (const i of idx) if (points[i].y === 1) c1++;
+                const majority = c1 * 2 >= idx.length ? 1 : 0;
+                const node = { leaf: true, pred: majority };
+                if (d >= depth || giniOf(null, idx) === 0 || idx.length < 4) return node;
+
+                let best = null;
+                for (let f = 0; f < 2; f++) {
+                    const vals = idx.map(i => points[i].x[f]).sort((a, b) => a - b);
+                    for (let k = 1; k < vals.length; k++) {
+                        if (vals[k] === vals[k - 1]) continue;
+                        const s = (vals[k] + vals[k - 1]) / 2;
+                        const L = idx.filter(i => points[i].x[f] <= s);
+                        const R = idx.filter(i => points[i].x[f] > s);
+                        if (!L.length || !R.length) continue;
+                        const gain = giniOf(null, idx) - L.length / idx.length * giniOf(null, L) - R.length / idx.length * giniOf(null, R);
+                        if (!best || gain > best.gain) best = { f: f, s: s, L: L, R: R, gain: gain };
+                    }
+                }
+                if (!best || best.gain <= 1e-9) return node;
+                node.leaf = false;
+                node.f = best.f;
+                node.s = best.s;
+                node.left = buildNode(best.L, d + 1);
+                node.right = buildNode(best.R, d + 1);
+                return node;
+            }
+        }
+
+        function stumpPredict(stump, x) {
+            let n = stump;
+            while (!n.leaf) {
+                n = x[n.f] <= n.s ? n.left : n.right;
+            }
+            return n.pred;
+        }
+
+        // ================= Bagging =================
+        let bagForest = [];
+
+        function baggingAdd(m) {
+            for (let t = 0; t < m; t++) {
+                // 自助抽样
+                const bootIdx = [];
+                for (let i = 0; i < points.length; i++) {
+                    bootIdx.push(Math.floor(rand() * points.length));
+                }
+                // 用自助集训练：临时替换 points 引用太绕，直接闭包传 idx
+                const sub = bootIdx.map(i => points[i]);
+                const stump = trainStumpOn(sub, 2);
+                bagForest.push(stump);
+            }
+        }
+
+        function trainStumpOn(sub, depth) {
+            function g(sub2) {
+                let c1 = 0;
+                for (const p of sub2) if (p.y === 1) c1++;
+                const p1 = c1 / sub2.length;
+                return 1 - p1 * p1 - (1 - p1) * (1 - p1);
+            }
+            function build(sub2, d) {
+                let c1 = 0;
+                for (const p of sub2) if (p.y === 1) c1++;
+                const majority = c1 * 2 >= sub2.length ? 1 : 0;
+                const node = { leaf: true, pred: majority };
+                if (d >= depth || g(sub2) === 0 || sub2.length < 4) return node;
+                let best = null;
+                for (let f = 0; f < 2; f++) {
+                    const vals = sub2.map(p => p.x[f]).sort((a, b) => a - b);
+                    for (let k = 1; k < vals.length; k++) {
+                        if (vals[k] === vals[k - 1]) continue;
+                        const s = (vals[k] + vals[k - 1]) / 2;
+                        const L = sub2.filter(p => p.x[f] <= s);
+                        const R = sub2.filter(p => p.x[f] > s);
+                        if (!L.length || !R.length) continue;
+                        const gain = g(sub2) - L.length / sub2.length * g(L) - R.length / sub2.length * g(R);
+                        if (!best || gain > best.gain) best = { f: f, s: s, L: L, R: R, gain: gain };
+                    }
+                }
+                if (!best || best.gain <= 1e-9) return node;
+                node.leaf = false;
+                node.f = best.f;
+                node.s = best.s;
+                node.left = build(best.L, d + 1);
+                node.right = build(best.R, d + 1);
+                return node;
+            }
+            return build(sub, 0);
+        }
+
+        function bagPredict(x) {
+            let votes = 0;
+            bagForest.forEach(function (st) { votes += stumpPredict(st, x); });
+            return votes * 2 >= bagForest.length ? 1 : 0;
+        }
+
+        // ================= AdaBoost =================
+        let boostLearners = [];  // {stump, alpha}
+        let sampleW = null;
+
+        function boostReset() {
+            boostLearners = [];
+            sampleW = new Array(points.length).fill(1 / points.length);
+        }
+
+        function boostingAdd(m) {
+            for (let t = 0; t < m; t++) {
+                // 加权抽样
+                const cum = [];
+                let acc = 0;
+                for (let i = 0; i < points.length; i++) { acc += sampleW[i]; cum.push(acc); }
+                const sub = [];
+                for (let k = 0; k < points.length; k++) {
+                    const r = rand() * acc;
+                    let lo = 0, hi = cum.length - 1;
+                    while (lo < hi) {
+                        const mid = (lo + hi) >> 1;
+                        if (cum[mid] < r) lo = mid + 1; else hi = mid;
+                    }
+                    sub.push(points[lo]);
+                }
+                const stump = trainStumpOn(sub, 2);
+
+                // 加权错误率（在全体点上）
+                let err = 0;
+                points.forEach(function (p) {
+                    if (stumpPredict(stump, p.x) !== p.y) err += sampleW[p0(p)];
+                });
+                function p0(p) { return points.indexOf(p); }
+
+                err = Math.min(Math.max(err, 1e-6), 1 - 1e-6);
+                const alphaT = 0.5 * Math.log((1 - err) / err);
+
+                // 权重更新
+                points.forEach(function (p) {
+                    const idx = points.indexOf(p);
+                    if (stumpPredict(stump, p.x) !== p.y) sampleW[idx] *= Math.exp(alphaT);
+                    else sampleW[idx] *= Math.exp(-alphaT);
+                });
+                let z = 0;
+                sampleW.forEach(function (w) { z += w; });
+                sampleW = sampleW.map(function (w) { return w / z; });
+
+                boostLearners.push({ stump: stump, alpha: alphaT });
+            }
+        }
+
+        function boostPredict(x) {
+            let s = 0;
+            boostLearners.forEach(function (l) {
+                s += l.alpha * (stumpPredict(l.stump, x) === 1 ? 1 : -1);
+            });
+            return s >= 0 ? 1 : 0;
+        }
+
+        // ================= 绘制 =================
+        function makeDrawer(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            const VMIN = -4, VMAX = 6;
+
+            return {
+                draw: function (predictFn, weightMarker) {
+                    ctx.clearRect(0, 0, W, H);
+                    const cell = 12;
+                    for (let px = 0; px < W; px += cell) {
+                        for (let py = 0; py < H; py += cell) {
+                            const vx = VMIN + (px + cell / 2) / W * (VMAX - VMIN);
+                            const vy = VMIN + (H - py - cell / 2) / H * (VMAX - VMIN);
+                            const out = predictFn([vx, vy]);
+                            ctx.fillStyle = out === 1 ? 'rgba(232,62,140,0.16)' : 'rgba(77,148,255,0.16)';
+                            ctx.fillRect(px, py, cell, cell);
+                        }
+                    }
+                    points.forEach(function (p) {
+                        const r = weightMarker ? (3 + weightMarker(p) * 90) : 4.5;
+                        ctx.beginPath();
+                        ctx.arc(
+                            (p.x[0] - VMIN) / (VMAX - VMIN) * W,
+                            H - (p.x[1] - VMIN) / (VMAX - VMIN) * H,
+                            Math.min(r, 11), 0, Math.PI * 2
+                        );
+                        ctx.fillStyle = p.y === 1 ? '#e83e8c' : '#4d94ff';
+                        ctx.fill();
+                        ctx.strokeStyle = 'white';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    });
+                }
+            };
+        }
+
+        const bagDrawer = makeDrawer('bagCanvas');
+        const boostDrawer = makeDrawer('boostCanvas');
+
+        // ================= 指标与 UI =================
+        function accOf(predictFn) {
+            let c = 0;
+            points.forEach(function (p) { if (predictFn(p.x) === p.y) c++; });
+            return c / points.length;
+        }
+
+        function refresh() {
+            bagDrawer.draw(bagPredict, null);
+            boostDrawer.draw(boostPredict, function (p) {
+                const idx = points.indexOf(p);
+                return sampleW[idx] * points.length; // 归一化到平均=1
+            });
+
+            document.getElementById('bagCount').textContent = bagForest.length;
+            document.getElementById('boostCount').textContent = boostLearners.length;
+            document.getElementById('bagAcc').textContent = bagForest.length ? (accOf(bagPredict) * 100).toFixed(1) + '%' : '--';
+            document.getElementById('boostAcc').textContent = boostLearners.length ? (accOf(boostPredict) * 100).toFixed(1) + '%' : '--';
+
+            if (bagForest.length) {
+                let s = 0;
+                bagForest.forEach(function (st) {
+                    let c = 0;
+                    points.forEach(function (p) { if (stumpPredict(st, p.x) === p.y) c++; });
+                    s += c / points.length;
+                });
+                document.getElementById('bagSingle').textContent = (s / bagForest.length * 100).toFixed(1) + '%';
+            } else {
+                document.getElementById('bagSingle').textContent = '--';
+            }
+            if (boostLearners.length) {
+                const last = boostLearners[boostLearners.length - 1].stump;
+                let c = 0;
+                points.forEach(function (p) { if (stumpPredict(last, p.x) === p.y) c++; });
+                document.getElementById('boostSingle').textContent = (c / points.length * 100).toFixed(1) + '%';
+            } else {
+                document.getElementById('boostSingle').textContent = '--';
+            }
+
+            const bagAccTxt = bagForest.length ? (accOf(bagPredict) * 100).toFixed(1) + '%' : '--';
+            const boostAccTxt = boostLearners.length ? (accOf(boostPredict) * 100).toFixed(1) + '%' : '--';
+            const lastAlpha = boostLearners.length ? boostLearners[boostLearners.length - 1].alpha : null;
+            const maxW = (sampleW && sampleW.length) ? Math.max.apply(null, sampleW) : 0;
+            const avgW = (sampleW && sampleW.length) ? 1 / sampleW.length : 0;
+
+            document.getElementById('bagFormula').innerHTML =
+                '<div class="row"><span class="k">集成预测</span>：<span class="fm">Ĥ(x) = sign( Σ<sub>m=1..M</sub> h<sub>m</sub>(x) )</span>　<span style="color:#8a755a">多数投票，每棵树权重相同 1/M</span></div>' +
+                '<div class="row"><span class="k">自助采样</span>：<span class="fm">每棵树从 n 个样本中有放回抽 n 次</span>　当前树数 <span class="v">M = ' + bagForest.length + '</span>　准确率 <span class="v">' + bagAccTxt + '</span></div>' +
+                '<div class="row"><span style="color:#8a755a">边界随树数目增多而平滑：平均效应抵消单棵树的过拟合（降方差）</span></div>';
+
+            document.getElementById('boostFormula').innerHTML =
+                '<div class="row"><span class="k">集成预测</span>：<span class="fm">H(x) = sign( Σ<sub>m=1..M</sub> α<sub>m</sub>·h<sub>m</sub>(x) )</span></div>' +
+                '<div class="row"><span class="k">学习器权重</span>：<span class="fm">α<sub>m</sub> = ½·ln( (1 − ε<sub>m</sub>) / ε<sub>m</sub> )</span>' + (lastAlpha !== null ? '　最新一轮 <span class="v">α = ' + lastAlpha.toFixed(3) + '</span>' : '') + '</div>' +
+                '<div class="row"><span class="k">样本权重更新</span>：<span class="fm">wᵢ ← wᵢ·exp( α<sub>m</sub>·[yᵢ ≠ h<sub>m</sub>(xᵢ)] )，再归一化 Σwᵢ = 1</span>　当前最大权重 <span class="v">' + maxW.toFixed(3) + '</span>（均值 ' + avgW.toFixed(3) + '）</div>' +
+                '<div class="row">弱学习器数 <span class="v">M = ' + boostLearners.length + '</span>　准确率 <span class="v">' + boostAccTxt + '</span>　<span style="color:#8a755a">点越大 = 上轮分错，权重被放大</span></div>';
+        }
+
+        document.getElementById('addBtn').addEventListener('click', function () {
+            baggingAdd(10);
+            boostingAdd(10);
+            refresh();
+        });
+        document.getElementById('autoBtn').addEventListener('click', function () {
+            const need = 40;
+            const nBag = Math.max(0, need - bagForest.length);
+            const nBoost = Math.max(0, need - boostLearners.length);
+            baggingAdd(nBag);
+            boostingAdd(nBoost);
+            refresh();
+        });
+        document.getElementById('resetBtn').addEventListener('click', function () {
+            bagForest = [];
+            boostReset();
+            refresh();
+        });
+
+        boostReset();
+        refresh();
+    </script>
+</body>
+</html>

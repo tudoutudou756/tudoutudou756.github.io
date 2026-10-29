@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logistic回归 - 决策边界与梯度下降</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 600px; }
+        .panel-side { flex: 1 1 300px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 10px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; margin: 0 auto; }
+
+        .controls { margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-step { background-color: #d2761f; }
+        .btn-step:hover { background-color: #a85c12; }
+        .btn-run { background-color: #28a745; }
+        .btn-run:hover { background-color: #218838; }
+        .btn-reset { background-color: #dc3545; }
+        .btn-reset:hover { background-color: #c82333; }
+
+        .slider-label { font-weight: bold; color: #3e3324; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d2761f; cursor: pointer;
+        }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .metric-item { text-align: center; min-width: 90px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #d2761f; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.08em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .legend { font-size: 14px; color: #4a3e2d; margin: 8px 0; }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 5px 0 12px; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Logistic回归 - 决策边界与梯度下降</h1>
+
+        <div class="layout">
+            <div class="panel-main">
+                <h3>分类可视化（背景色深浅 = 模型输出的类别概率）</h3>
+                <div class="chart-box"><canvas id="mainCanvas" width="640" height="480"></canvas>
+                    <div class="formula-strip" id="logiFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e83e8c;"></span>类别 A (y=1)
+                    <span class="dot" style="background:#4d94ff;"></span>类别 B (y=0)
+                    <span style="margin-left:12px;">— 白色虚线为决策边界 p = 0.5</span>
+                </div>
+            </div>
+            <div class="panel-side">
+                <h3>损失曲线（交叉熵）</h3>
+                <div class="chart-box"><canvas id="lossCanvas" width="320" height="240"></canvas>
+                    <div class="formula-strip" id="lossFormula"></div>
+                </div>
+
+                <h3>控制台</h3>
+                <div class="controls">
+                    <div class="slider-label"><span>学习率</span><span id="lrValue">0.50</span></div>
+                    <input type="range" id="lrSlider" min="0.05" max="2" step="0.05" value="0.5">
+                    <div class="btn-row">
+                        <button class="btn-step" id="stepBtn">单步训练</button>
+                        <button class="btn-run" id="runBtn">训练 200 步</button>
+                        <button class="btn-reset" id="resetBtn">重置模型</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mLoss">--</div>
+                        <div class="metric-label">交叉熵损失</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAcc">--</div>
+                        <div class="metric-label">训练准确率</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mEpoch">0</div>
+                        <div class="metric-label">已训练步数</div>
+                    </div>
+                </div>
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mW1">0.00</div>
+                        <div class="metric-label">w₁</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mW2">0.00</div>
+                        <div class="metric-label">w₂</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mB">0.00</div>
+                        <div class="metric-label">偏置 b</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 点击「单步训练」或「训练 200 步」，观察决策边界从随机初始位置逐渐旋转到最优位置</p>
+            <p>• 调大学习率可以加快收敛，但太大可能导致损失震荡甚至发散</p>
+            <p>• 背景颜色深浅表示模型认为该位置属于类别 A 的概率；白色虚线是 p=0.5 的决策边界</p>
+            <p>• 「重置模型」把参数归零重新开始，「重置数据」位置在按钮旁说明中省略（刷新页面即可换一批同分布数据）</p>
+        </div>
+    </div>
+
+    <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+        <div class="instructions">
+            <h3>Logistic 回归原理</h3>
+
+            <h4>Sigmoid 激活</h4>
+            <p>线性输出通过 Sigmoid 函数压缩到 (0,1)，作为样本属于正类的概率估计：</p>
+            <div class="formula-container">p = σ(z) = 1 / (1 + e<sup>−z</sup>)，　z = w₁x₁ + w₂x₂ + b</div>
+
+            <h4>交叉熵损失</h4>
+            <p>对二分类问题，采用负对数似然（交叉熵）作为损失函数：</p>
+            <div class="formula-container">L = −(1/n) Σ [ yᵢ·ln(pᵢ) + (1−yᵢ)·ln(1−pᵢ) ]</div>
+            <p>当 pᵢ 与真实标签 yᵢ 接近时损失趋近 0；预测越自信且越错误，惩罚越大。</p>
+
+            <h4>梯度下降更新</h4>
+            <p>损失对参数的梯度具有简洁形式（预测误差 × 输入）：</p>
+            <div class="formula-container">∂L/∂w = (1/n) Σ (pᵢ − yᵢ)·xᵢ，　∂L/∂b = (1/n) Σ (pᵢ − yᵢ)</div>
+            <div class="formula-container">w ← w − η·∂L/∂w，　b ← b − η·∂L/∂b</div>
+            <p>其中 η 为学习率。决策边界是 p = 0.5 对应的等值线，即 w₁x₁ + w₂x₂ + b = 0 的一条直线。</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ---------- 数据：两个高斯分布的二维点 ----------
+        let points = (function () {
+            let seed = 7;
+            function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+            function gauss() {
+                let u = 0, v = 0;
+                while (u === 0) u = rand();
+                while (v === 0) v = rand();
+                return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+            }
+            const pts = [];
+            for (let i = 0; i < 60; i++) {
+                pts.push({ x1: 1.8 + gauss() * 1.1, x2: 1.5 + gauss() * 1.1, y: 1 });
+            }
+            for (let i = 0; i < 60; i++) {
+                pts.push({ x1: -1.8 + gauss() * 1.1, x2: -1.5 + gauss() * 1.1, y: 0 });
+            }
+            return pts;
+        })();
+
+        // ---------- 模型参数 ----------
+        let w1 = 0, w2 = 0, b = 0;
+        let epoch = 0;
+        let lossHistory = [];
+
+        function sigmoid(z) {
+            if (z >= 0) return 1 / (1 + Math.exp(-z));
+            const ez = Math.exp(z);
+            return ez / (1 + ez);
+        }
+
+        function predict(x1, x2) { return sigmoid(w1 * x1 + w2 * x2 + b); }
+
+        function computeLoss() {
+            let sum = 0;
+            points.forEach(function (p) {
+                const pr = Math.min(Math.max(predict(p.x1, p.x2), 1e-12), 1 - 1e-12);
+                sum += -(p.y * Math.log(pr) + (1 - p.y) * Math.log(1 - pr));
+            });
+            return sum / points.length;
+        }
+
+        function computeAcc() {
+            let correct = 0;
+            points.forEach(function (p) {
+                const pred = predict(p.x1, p.x2) >= 0.5 ? 1 : 0;
+                if (pred === p.y) correct++;
+            });
+            return correct / points.length;
+        }
+
+        function trainStep(lr) {
+            let g1 = 0, g2 = 0, gb = 0;
+            const n = points.length;
+            points.forEach(function (p) {
+                const err = predict(p.x1, p.x2) - p.y;
+                g1 += err * p.x1;
+                g2 += err * p.x2;
+                gb += err;
+            });
+            w1 -= lr * g1 / n;
+            w2 -= lr * g2 / n;
+            b -= lr * gb / n;
+            epoch++;
+            lossHistory.push(computeLoss());
+            if (lossHistory.length > 400) lossHistory.shift();
+        }
+
+        // ---------- 主图绘制 ----------
+        const mainCanvas = document.getElementById('mainCanvas');
+        const ctx = mainCanvas.getContext('2d');
+        const W = mainCanvas.width, H = mainCanvas.height;
+        const VMIN = -5, VMAX = 5;
+
+        function xpix(v) { return (v - VMIN) / (VMAX - VMIN) * W; }
+        function ypix(v) { return H - (v - VMIN) / (VMAX - VMIN) * H; }
+        function vval(px) { return VMIN + px / W * (VMAX - VMIN); }
+
+        function draw() {
+            // 概率背景
+            const cell = 16;
+            for (let px = 0; px < W; px += cell) {
+                for (let py = 0; py < H; py += cell) {
+                    const vx = vval(px + cell / 2);
+                    const vy = VMIN + (H - py - cell / 2) / H * (VMAX - VMIN);
+                    const pr = predict(vx, vy);
+                    let alpha = Math.abs(pr - 0.5) * 2 * 0.35;
+                    ctx.fillStyle = pr >= 0.5
+                        ? 'rgba(232,62,140,' + alpha.toFixed(3) + ')'
+                        : 'rgba(77,148,255,' + alpha.toFixed(3) + ')';
+                    ctx.fillRect(px, py, cell, cell);
+                }
+            }
+
+            // 坐标轴
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(xpix(VMIN), ypix(0)); ctx.lineTo(xpix(VMAX), ypix(0)); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(xpix(0), ypix(VMIN)); ctx.lineTo(xpix(0), ypix(VMAX)); ctx.stroke();
+            ctx.fillStyle = '#584a36';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('特征 x₁', W / 2, H - 6);
+            for (let g = -4; g <= 4; g += 2) {
+                if (g === 0) continue;
+                ctx.fillText(String(g), xpix(g), ypix(0) + 14);
+            }
+
+            // 决策边界 w1*x1 + w2*x2 + b = 0
+            if (Math.abs(w2) > 1e-9 || Math.abs(w1) > 1e-9) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+                ctx.lineWidth = 2.5;
+                ctx.setLineDash([8, 5]);
+                ctx.beginPath();
+                let p1x, p1y, p2x, p2y;
+                if (Math.abs(w2) > Math.abs(w1)) {
+                    p1x = VMIN; p2x = VMAX;
+                    p1y = -(w1 * VMIN + b) / w2;
+                    p2y = -(w1 * VMAX + b) / w2;
+                } else {
+                    p1y = VMIN; p2y = VMAX;
+                    p1x = -(w2 * VMIN + b) / w1;
+                    p2x = -(w2 * VMAX + b) / w1;
+                }
+                ctx.moveTo(xpix(p1x), ypix(p1y));
+                ctx.lineTo(xpix(p2x), ypix(p2y));
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // 数据点
+            points.forEach(function (p) {
+                ctx.beginPath();
+                ctx.arc(xpix(p.x1), ypix(p.x2), 6, 0, Math.PI * 2);
+                ctx.fillStyle = p.y === 1 ? '#e83e8c' : '#4d94ff';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+
+        // ---------- 损失曲线 ----------
+        const lossCanvas = document.getElementById('lossCanvas');
+        const lctx = lossCanvas.getContext('2d');
+
+        function drawLoss() {
+            lctx.clearRect(0, 0, lossCanvas.width, lossCanvas.height);
+            lctx.strokeStyle = '#f2e7d0';
+            lctx.strokeRect(0.5, 0.5, lossCanvas.width - 1, lossCanvas.height - 1);
+            if (lossHistory.length < 2) return;
+            const maxL = Math.max.apply(null, lossHistory);
+            const minL = Math.min.apply(null, lossHistory);
+            const span = Math.max(maxL - minL, 1e-6);
+            lctx.strokeStyle = '#e83e8c';
+            lctx.lineWidth = 2;
+            lctx.beginPath();
+            lossHistory.forEach(function (v, i) {
+                const x = i / (lossHistory.length - 1) * (lossCanvas.width - 20) + 10;
+                const y = lossCanvas.height - 20 - (v - minL) / span * (lossCanvas.height - 40);
+                if (i === 0) lctx.moveTo(x, y); else lctx.lineTo(x, y);
+            });
+            lctx.stroke();
+            lctx.fillStyle = '#6f6049';
+            lctx.font = '11px Arial';
+            lctx.textAlign = 'left';
+            lctx.fillText('loss=' + lossHistory[lossHistory.length - 1].toFixed(4), 12, 16);
+        }
+
+        // ---------- UI 更新 ----------
+        function updateUI() {
+            document.getElementById('mLoss').textContent = computeLoss().toFixed(4);
+            document.getElementById('mAcc').textContent = (computeAcc() * 100).toFixed(1) + '%';
+            document.getElementById('mEpoch').textContent = epoch;
+            document.getElementById('mW1').textContent = w1.toFixed(3);
+            document.getElementById('mW2').textContent = w2.toFixed(3);
+            document.getElementById('mB').textContent = b.toFixed(3);
+
+            const boundaryLine = Math.abs(w2) < 1e-6
+                ? 'w₂ ≈ 0，边界退化为竖直线 x₁ = ' + (-b / (Math.abs(w1) < 1e-6 ? 1 : w1)).toFixed(2)
+                : 'x₂ = ' + (-w1 / w2).toFixed(2) + '·x₁ ' + (b === 0 ? '' : ((-b / w2) >= 0 ? '+ ' : '− ') + Math.abs(b / w2).toFixed(2));
+            document.getElementById('logiFormula').innerHTML =
+                '<div class="row"><span class="k">线性打分</span>：<span class="fm">z = w₁·x₁ + w₂·x₂ + b = <span class="v">' + w1.toFixed(3) + '</span>·x₁ + <span class="v">' + w2.toFixed(3) + '</span>·x₂ + <span class="v">' + b.toFixed(3) + '</span></span></div>' +
+                '<div class="row"><span class="k">概率输出</span>：<span class="fm">ŷ = P(y=1|x) = σ(z) = 1 / (1 + e⁻ᶻ)</span>　<span style="color:#8a755a">（背景色深浅 = ŷ 大小）</span></div>' +
+                '<div class="row"><span class="k">决策边界</span>（白线）：<span class="fm">σ(z) = 0.5 ⟺ z = 0 ⟺ ' + boundaryLine + '</span></div>';
+
+            const lrNow = parseFloat(document.getElementById('lrSlider').value);
+            document.getElementById('lossFormula').innerHTML =
+                '<div class="row"><span class="k">对数损失</span>：<span class="fm">J = −(1/n)·Σ [ yᵢ·ln ŷᵢ + (1−yᵢ)·ln(1−ŷᵢ) ] = <span class="v">' + computeLoss().toFixed(4) + '</span></span></div>' +
+                '<div class="row"><span class="k">梯度下降</span>：<span class="fm">w ← w − η·(1/n)Σ(ŷᵢ − yᵢ)·xᵢ　　b ← b − η·(1/n)Σ(ŷᵢ − yᵢ)</span></div>' +
+                '<div class="row"><span style="color:#8a755a">当前</span> <span class="fm">η = <span class="v">' + lrNow.toFixed(2) + '</span>　　epoch = <span class="v">' + epoch + '</span></span></div>';
+
+            draw();
+            drawLoss();
+        }
+
+        const lrSlider = document.getElementById('lrSlider');
+        lrSlider.addEventListener('input', function () {
+            document.getElementById('lrValue').textContent = parseFloat(lrSlider.value).toFixed(2);
+        });
+
+        document.getElementById('stepBtn').addEventListener('click', function () {
+            trainStep(parseFloat(lrSlider.value));
+            updateUI();
+        });
+
+        document.getElementById('runBtn').addEventListener('click', function () {
+            const lr = parseFloat(lrSlider.value);
+            for (let i = 0; i < 200; i++) trainStep(lr);
+            updateUI();
+        });
+
+        document.getElementById('resetBtn').addEventListener('click', function () {
+            w1 = 0; w2 = 0; b = 0; epoch = 0; lossHistory = [];
+            updateUI();
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>

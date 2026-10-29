@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>支持向量机 - 最大间隔与核技巧</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 600px; }
+        .panel-side { flex: 1 1 320px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; }
+
+        .controls { margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-solve { background-color: #28a745; }
+        .btn-solve:hover { background-color: #218838; }
+        .btn-data { background-color: #d2761f; }
+        .btn-data:hover { background-color: #a85c12; }
+
+        .kernel-row { display: flex; gap: 8px; margin: 10px 0; }
+        .k-btn {
+            padding: 8px 16px;
+            font-size: 13px;
+            border: 2px solid #6f42c1;
+            background: white;
+            color: #6f42c1;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .k-btn.active { background: #6f42c1; color: white; }
+
+        .slider-label { font-weight: bold; color: #3e3324; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #6f42c1; cursor: pointer;
+        }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .metric-item { text-align: center; min-width: 90px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #6f42c1; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .legend { font-size: 14px; color: #4a3e2d; margin: 8px 0; }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin: 0 5px 0 12px; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>支持向量机 - 最大间隔与核技巧</h1>
+
+        <div class="layout">
+            <div class="panel-main">
+                <h3>分类结果（实线 = 决策边界，虚线 = 间隔带边缘，圈中 = 支持向量）</h3>
+                <div class="chart-box"><canvas id="svmCanvas" width="640" height="480"></canvas>
+                    <div class="formula-strip" id="svmFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e83e8c;"></span>类别 A (+1)
+                    <span class="dot" style="background:#4d94ff;"></span>类别 B (−1)
+                    <span style="margin-left:12px;">⭕ 空心圈标记支持向量（决定边界的关键样本）</span>
+                </div>
+            </div>
+
+            <div class="panel-side">
+                <h3>核函数</h3>
+                <div class="kernel-row">
+                    <button class="k-btn active" data-k="linear">线性核</button>
+                    <button class="k-btn" data-k="rbf">RBF 高斯核</button>
+                </div>
+
+                <h3>参数</h3>
+                <div class="controls">
+                    <div class="slider-label"><span>正则化 C</span><span id="cValue">10</span></div>
+                    <input type="range" id="cSlider" min="0.1" max="100" step="0.1" value="10">
+                    <div class="slider-label"><span>RBF 带宽 σ</span><span id="sigmaValue">1.20</span></div>
+                    <input type="range" id="sigmaSlider" min="0.2" max="4" step="0.05" value="1.2">
+                    <div class="btn-row">
+                        <button class="btn-solve" id="solveBtn">重新求解</button>
+                        <button class="btn-data" id="dataBtn">换一批数据</button>
+                    </div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mNSV">--</div>
+                        <div class="metric-label">支持向量数</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mAcc">--</div>
+                        <div class="metric-label">训练准确率</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mMargin">--</div>
+                        <div class="metric-label">间隔宽度 (线性核)</div>
+                    </div>
+                </div>
+
+                <div class="instructions" style="margin-top:15px;">
+                    <h3>观察要点</h3>
+                    <p>• 线性核：边界是一条直线，间隔带是两条平行虚线之间的区域</p>
+                    <p>• 换 RBF 核：边界可以弯出任意形状，轻松分开环形/月牙数据</p>
+                    <p>• C 越大越容忍误差小（易过拟合），C 越小间隔越宽（易欠拟合）</p>
+                    <p>• σ 越小边界越「碎」，越大边界越平滑</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+            <div class="instructions">
+                <h3>SVM 原理</h3>
+
+                <h4>最大间隔分类</h4>
+                <p>找到超平面 w·x + b = 0，使两类样本到它的最小距离（间隔）最大：</p>
+                <div class="formula-container">min ½||w||²　s.t.　yᵢ(w·xᵢ + b) ≥ 1，y ∈ {−1, +1}</div>
+                <p>间隔宽度 = 2/||w||。落在间隔边界上的样本（yᵢ(w·xᵢ+b)=1）就是<b>支持向量</b> —— 只有它们决定边界位置，其余样本删掉也不影响模型。</p>
+
+                <h4>软间隔与松弛变量</h4>
+                <p>数据线性不可分时引入 ξᵢ 允许个别样本越界：</p>
+                <div class="formula-container">min ½||w||² + C·Σξᵢ　s.t.　yᵢ(w·xᵢ+b) ≥ 1−ξᵢ，ξᵢ ≥ 0</div>
+
+                <h4>核技巧</h4>
+                <p>把样本映射到高维空间再找线性边界，但计算时只用到核函数 K(xᵢ,xⱼ)=⟨φ(xᵢ),φ(xⱼ)⟩，无需显式计算 φ：</p>
+                <div class="formula-container">RBF 核：K(x, x′) = exp(−||x − x′||² / (2σ²))</div>
+                <p>本演示用最小二乘 SVM（LSSVM）求解：解一个线性方程组得到系数 α，决策函数 f(x) = Σ αᵢK(xᵢ,x) + b。</p>
+            </div>
+        </div>
+
+        <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+        <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+        <script>
+            // ================= 数据 =================
+            let seed = 31;
+            function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+            function gauss() {
+                let u = 0, v = 0;
+                while (u === 0) u = rand();
+                while (v === 0) v = rand();
+                return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+            }
+
+            let points = [];
+
+            function makeData() {
+                const pts = [];
+                // 两个高斯簇 + 少量交叉噪声，保证线性核也有意义
+                for (let i = 0; i < 40; i++) {
+                    pts.push({ x: [1.9 + gauss() * 1.1, 1.6 + gauss() * 1.1], y: 1 });
+                }
+                for (let i = 0; i < 40; i++) {
+                    pts.push({ x: [-1.9 + gauss() * 1.1, -1.6 + gauss() * 1.1], y: -1 });
+                }
+                return pts;
+            }
+
+            // ================= LSSVM 求解 =================
+            let kernelKind = 'linear';
+            let alpha = [], bias = 0;
+
+            function kernel(xi, xj) {
+                if (kernelKind === 'linear') {
+                    return xi[0] * xj[0] + xi[1] * xj[1];
+                }
+                const s = parseFloat(document.getElementById('sigmaSlider').value);
+                const d2 = (xi[0] - xj[0]) * (xi[0] - xj[0]) + (xi[1] - xj[1]) * (xi[1] - xj[1]);
+                return Math.exp(-d2 / (2 * s * s));
+            }
+
+            function solveLSSVM() {
+                const n = points.length;
+                const C = parseFloat(document.getElementById('cSlider').value);
+                // 构造 (n+1)x(n+1) 线性系统
+                // [ 0     1ᵀ    ] [b ]   [0]
+                // [ 1  K+I/C   ] [α ] = [y]
+                const A = [];
+                const rhs = [];
+                for (let i = 0; i <= n; i++) {
+                    A.push(new Array(n + 1).fill(0));
+                    rhs.push(0);
+                }
+                for (let i = 0; i < n; i++) {
+                    A[0][i + 1] = 1;
+                    A[i + 1][0] = 1;
+                    rhs[i + 1] = points[i].y;
+                    for (let j = 0; j < n; j++) {
+                        A[i + 1][j + 1] = kernel(points[i].x, points[j].x);
+                        if (i === j) A[i + 1][j + 1] += 1 / C;
+                    }
+                }
+                // 高斯消元（部分主元）
+                const m = n + 1;
+                for (let col = 0; col < m; col++) {
+                    let piv = col;
+                    for (let r = col + 1; r < m; r++) {
+                        if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+                    }
+                    if (piv !== col) {
+                        const tA = A[piv]; A[piv] = A[col]; A[col] = tA;
+                        const tR = rhs[piv]; rhs[piv] = rhs[col]; rhs[col] = tR;
+                    }
+                    const pv = A[col][col];
+                    if (Math.abs(pv) < 1e-12) continue;
+                    for (let r = col + 1; r < m; r++) {
+                        const factor = A[r][col] / pv;
+                        if (factor === 0) continue;
+                        for (let c = col; c < m; c++) A[r][c] -= factor * A[col][c];
+                        rhs[r] -= factor * rhs[col];
+                    }
+                }
+                const sol = new Array(m).fill(0);
+                for (let r = m - 1; r >= 0; r--) {
+                    let s = rhs[r];
+                    for (let c = r + 1; c < m; c++) s -= A[r][c] * sol[c];
+                    const pv = A[r][r];
+                    sol[r] = Math.abs(pv) < 1e-12 ? 0 : s / pv;
+                }
+                bias = sol[0];
+                alpha = sol.slice(1);
+            }
+
+            function decision(x) {
+                let s = bias;
+                for (let i = 0; i < points.length; i++) {
+                    if (Math.abs(alpha[i]) > 1e-6) s += alpha[i] * kernel(points[i].x, x);
+                }
+                return s;
+            }
+
+            function computeAcc() {
+                let correct = 0;
+                points.forEach(function (p) {
+                    if ((decision(p.x) >= 0 ? 1 : -1) === p.y) correct++;
+                });
+                return correct / points.length;
+            }
+
+            function countSV() {
+                let c = 0;
+                alpha.forEach(function (a) { if (Math.abs(a) > 0.05) c++; });
+                return c;
+            }
+
+            function linearW() {
+                const w = [0, 0];
+                for (let i = 0; i < points.length; i++) {
+                    w[0] += alpha[i] * points[i].x[0];
+                    w[1] += alpha[i] * points[i].x[1];
+                }
+                return w;
+            }
+
+            // ================= 绘制 =================
+            const canvas = document.getElementById('svmCanvas');
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            const VMIN = -5, VMAX = 5;
+
+            function xpix(v) { return (v - VMIN) / (VMAX - VMIN) * W; }
+            function ypix(v) { return H - (v - VMIN) / (VMAX - VMIN) * H; }
+
+            function draw() {
+                // 概率背景
+                const cell = 14;
+                for (let px = 0; px < W; px += cell) {
+                    for (let py = 0; py < H; py += cell) {
+                        const vx = VMIN + (px + cell / 2) / W * (VMAX - VMIN);
+                        const vy = VMIN + (H - py - cell / 2) / H * (VMAX - VMIN);
+                        const f = decision([vx, vy]);
+                        const conf = Math.min(Math.abs(f) / 2, 1) * 0.32;
+                        ctx.fillStyle = f >= 0
+                            ? 'rgba(232,62,140,' + conf.toFixed(3) + ')'
+                            : 'rgba(77,148,255,' + conf.toFixed(3) + ')';
+                        ctx.fillRect(px, py, cell, cell);
+                    }
+                }
+
+                // 线性核：画间隔带
+                if (kernelKind === 'linear') {
+                    const w = linearW();
+                    const wn = Math.sqrt(w[0] * w[0] + w[1] * w[1]);
+                    if (wn > 1e-9) {
+                        // 决策边界 w·x + b = 0
+                        const lines = [
+                            { c: bias, style: '#3e3324', dash: [], width: 2.5 },
+                            { c: bias + 1, style: 'rgba(80,80,80,0.6)', dash: [6, 4], width: 1.5 },
+                            { c: bias - 1, style: 'rgba(80,80,80,0.6)', dash: [6, 4], width: 1.5 }
+                        ];
+                        lines.forEach(function (ln) {
+                            // w0*x + w1*y + c = 0 → y = -(w0*x + c)/w1（w1 小时改用竖线）
+                            ctx.strokeStyle = ln.style;
+                            ctx.lineWidth = ln.width;
+                            ctx.setLineDash(ln.dash);
+                            ctx.beginPath();
+                            if (Math.abs(w[1]) > Math.abs(w[0])) {
+                                const y1 = -(w[0] * VMIN + ln.c) / w[1];
+                                const y2 = -(w[0] * VMAX + ln.c) / w[1];
+                                ctx.moveTo(xpix(VMIN), ypix(y1));
+                                ctx.lineTo(xpix(VMAX), ypix(y2));
+                            } else {
+                                const x1 = -(w[1] * VMIN + ln.c) / w[0];
+                                const x2 = -(w[1] * VMAX + ln.c) / w[0];
+                                ctx.moveTo(xpix(x1), ypix(VMIN));
+                                ctx.lineTo(xpix(x2), ypix(VMAX));
+                            }
+                            ctx.stroke();
+                            ctx.setLineDash([]);
+                        });
+                    }
+                }
+
+                // 数据点 + 支持向量圈
+                points.forEach(function (p, i) {
+                    const isSV = Math.abs(alpha[i]) > 0.05;
+                    if (isSV) {
+                        ctx.beginPath();
+                        ctx.arc(xpix(p.x[0]), ypix(p.x[1]), 11, 0, Math.PI * 2);
+                        ctx.strokeStyle = '#f5a623';
+                        ctx.lineWidth = 2.5;
+                        ctx.stroke();
+                    }
+                    ctx.beginPath();
+                    ctx.arc(xpix(p.x[0]), ypix(p.x[1]), 5.5, 0, Math.PI * 2);
+                    ctx.fillStyle = p.y === 1 ? '#e83e8c' : '#4d94ff';
+                    ctx.fill();
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1.5;
+                    ctx.stroke();
+                });
+
+                // 坐标轴
+                ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(xpix(VMIN), ypix(0)); ctx.lineTo(xpix(VMAX), ypix(0)); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(xpix(0), ypix(VMIN)); ctx.lineTo(xpix(0), ypix(VMAX)); ctx.stroke();
+            }
+
+            // ================= UI =================
+            function refresh() {
+                solveLSSVM();
+                draw();
+                document.getElementById('mNSV').textContent = countSV() + ' / ' + points.length;
+                document.getElementById('mAcc').textContent = (computeAcc() * 100).toFixed(1) + '%';
+                if (kernelKind === 'linear') {
+                    const w = linearW();
+                    const wn = Math.sqrt(w[0] * w[0] + w[1] * w[1]);
+                    document.getElementById('mMargin').textContent = wn > 1e-9 ? (2 / wn).toFixed(2) : '--';
+                } else {
+                    document.getElementById('mMargin').textContent = 'RBF 无显式间隔';
+                }
+
+                const C = parseFloat(document.getElementById('cSlider').value);
+                const sg = parseFloat(document.getElementById('sigmaSlider').value);
+                const kStr = kernelKind === 'linear'
+                    ? '<span class="fm">K(x, x′) = xᵀ·x′</span>　<span style="color:#8a755a">（线性核，图中边界为直线）</span>'
+                    : '<span class="fm">K(x, x′) = exp( −‖x − x′‖² / (2σ²) )，σ = <span class="v">' + sg.toFixed(2) + '</span></span>';
+                const marginRow = kernelKind === 'linear'
+                    ? '<div class="row"><span class="k">间隔</span>：<span class="fm">margin = 2 / ‖w‖，　w = Σᵢ αᵢ·xᵢ　→　当前 <span class="v">' + document.getElementById('mMargin').textContent + '</span></span></div>'
+                    : '<div class="row"><span class="k">间隔</span>：RBF 核映射到高维空间，原空间无显式直线间隔 <span style="color:#8a755a">（边界由数据局部决定，σ 越小越易过拟合）</span></div>';
+                document.getElementById('svmFormula').innerHTML =
+                    '<div class="row"><span class="k">决策函数</span>：<span class="fm">f(x) = Σᵢ αᵢ·K(xᵢ, x) + b，　预测 ŷ = sign( f(x) )</span>　<span style="color:#8a755a">（实线 f=0，虚线 f=±1 为间隔带边界）</span></div>' +
+                    '<div class="row"><span class="k">核函数</span>：' + kStr + '</div>' +
+                    '<div class="row"><span class="k">求解（LSSVM）</span>：<span class="fm">[ 0　1ᵀ ；1　K + I/C ] · [ b ；α ] = [ 0 ；y ]</span>　惩罚系数 <span class="v">C = ' + C.toFixed(1) + '</span>　支持向量 <span class="v">' + countSV() + ' / ' + points.length + '</span></div>' +
+                    marginRow;
+            }
+
+            const cSlider = document.getElementById('cSlider');
+            cSlider.addEventListener('input', function () {
+                document.getElementById('cValue').textContent = parseFloat(cSlider.value).toFixed(1);
+            });
+            cSlider.addEventListener('change', refresh);
+            document.getElementById('sigmaSlider').addEventListener('change', refresh);
+
+            document.getElementById('solveBtn').addEventListener('click', refresh);
+            document.getElementById('dataBtn').addEventListener('click', function () {
+                seed = Math.floor(Math.random() * 100000) + 1;
+                points = makeData();
+                refresh();
+            });
+
+            document.querySelectorAll('.k-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.k-btn').forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    kernelKind = btn.getAttribute('data-k');
+                    refresh();
+                });
+            });
+
+            points = makeData();
+            refresh();
+        </script>
+    </div>
+</body>
+</html>

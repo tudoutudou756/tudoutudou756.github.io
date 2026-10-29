@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="MQ13cAqRoONr04xCccncLJ">
+<head data-page-node-id="AMTdfCuqa0fGj5edNyW8B2">
+    <meta charset="UTF-8" data-page-node-id="VZKo4Uw3IOUXMXuLXtHzKL">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="tcjXeqptWXmjG2AVhL1bTW">
+    <title>降维技术 - PCA主成分分析</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 520px; }
+        .panel-side { flex: 1 1 380px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; }
+
+        .controls { margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-pca { background-color: #28a745; }
+        .btn-pca:hover { background-color: #218838; }
+        .btn-orig { background-color: #d2761f; }
+        .btn-orig:hover { background-color: #a85c12; }
+        .btn-data { background-color: #6c757d; }
+        .btn-data:hover { background-color: #5a6268; }
+
+        .slider-label { font-weight: bold; color: #3e3324; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        input[type=range] {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #28a745; cursor: pointer;
+        }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .metric-item { text-align: center; min-width: 100px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #28a745; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .var-bar { display: flex; height: 34px; border-radius: 6px; overflow: hidden; border: 1px solid #d9c9ac; margin: 10px 0; font-size: 12px; font-weight: bold; color: white; text-align: center; line-height: 34px; }
+        .var-bar .v1 { background: #28a745; }
+        .var-bar .v2 { background: #85c9a0; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .legend { font-size: 13px; color: #4a3e2d; margin: 6px 0; }
+        .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin: 0 4px 0 10px; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body data-page-node-id="G8w1Yx3I5b6HK2ieQTNLn6">
+    <div class="container" data-page-node-id="bKkwbILruUD1bhd4MmYcrK">
+        <h1 data-page-node-id="2NcBZPsqTvBqCf1vns4SsL">降维技术 - PCA 主成分分析</h1>
+
+        <div class="layout" data-page-node-id="nN3vCNNfo14bZvMekL2713">
+            <div class="panel-main" data-page-node-id="OOUic9XiaeZMASHDaBaivg">
+                <h3 data-page-node-id="AE2FRxxuZvVZd5m4FJo0Ea">原始空间（红色箭头 = 主成分方向，长度 ∝ 标准差）</h3>
+                <div class="chart-box" data-page-node-id="BG4Us7YUAHMpSrc4DzFNiK"><canvas id="origCanvas" width="520" height="420" data-page-node-id="jC2YjUwnnthKVd1fupUyZ0"></canvas>
+                    <div class="formula-strip" id="origFormula" data-page-node-id="QI979sGQCEZvrA48ujMu0F"></div>
+                </div>
+            </div>
+
+            <div class="panel-side" data-page-node-id="z4YGHZJtgt0W4zQ0v7YRWa">
+                <h3 data-page-node-id="3UBNX1SapxJRVZtG8MzOqV">PCA 投影结果（1D 压缩到一条线）</h3>
+                <div class="chart-box" data-page-node-id="eE2TfCJvGEMOZW5MvWXDmO"><canvas id="projCanvas" width="380" height="160" data-page-node-id="TIRaglYrHRNZGMaayuSOp8"></canvas>
+                    <div class="formula-strip" id="projFormula" data-page-node-id="AixpnKkv3H2DyhkT1F2xW2"></div>
+                </div>
+
+                <h3 data-page-node-id="nk1uztHCLf5OVEk9iEtbOK">控制台</h3>
+                <div class="controls" data-page-node-id="22sWt6Nwbl7WPfDKG9vYBo">
+                    <div class="slider-label" data-page-node-id="VFslrkzbLkmtYnyuviB7PO"><span data-page-node-id="gHfMMuKeSaVoiDCzxEkSFV">投影噪声（重建误差可视化）</span><span id="noiseValue" data-page-node-id="JAD6eTqQaRBGFTF8nuPD3W">0.15</span></div>
+                    <input type="range" id="noiseSlider" min="0" max="1" step="0.05" value="0.15" data-page-node-id="DSez34sDDCFRUx94nPYcDr">
+                    <div class="btn-row" data-page-node-id="QvgDGEYvGYAB8HPKYvoaBZ">
+                        <button class="btn-pca" id="pcaBtn" data-page-node-id="wqE3nGqPKjboYZqPCvbXA6">执行 PCA</button>
+                        <button class="btn-orig" id="origBtn" data-page-node-id="rUmp6jez9SRuwl51HP9ntv">显示原始数据</button>
+                        <button class="btn-data" id="dataBtn" data-page-node-id="e7D0FDEHjMF8udvyG2LxzV">换一批数据</button>
+                    </div>
+                </div>
+
+                <div class="var-bar" data-page-node-id="3Vn9GhzPW7zOrUeTZNSFZe">
+                    <div class="v1" id="var1Bar" style="width:85%;" data-page-node-id="uDR4ZmLwqAGjpkwrEC44XV">PC1 85%</div>
+                    <div class="v2" id="var2Bar" style="width:15%;" data-page-node-id="OCNxqEexhuEzog8sXFeQNh">PC2 15%</div>
+                </div>
+
+                <div class="metrics" data-page-node-id="obFgkpQljjXiw3ApXHeDLJ">
+                    <div class="metric-item" data-page-node-id="iLu8OmlfGgRpLNGtFpCnkb">
+                        <div class="metric-value" id="mTheta" data-page-node-id="OkYgWXAe5Yc2yGms22E1fL">--°</div>
+                        <div class="metric-label" data-page-node-id="tD4SYAbtDlDM6CeVdgSv4b">PC1 方向角</div>
+                    </div>
+                    <div class="metric-item" data-page-node-id="HMXCXfdb78ouT9Ia1eWIfc">
+                        <div class="metric-value" id="mVar1" data-page-node-id="KxfAbuw6kWqhObZdIWz2Y4">--</div>
+                        <div class="metric-label" data-page-node-id="olvx9wwAely8uqxN2nPIzB">PC1 方差占比</div>
+                    </div>
+                    <div class="metric-item" data-page-node-id="PN0xoxbOcrMoLEgG0iTvIW">
+                        <div class="metric-value" id="mCorr" data-page-node-id="xUKY7AkJeOF4fBfBYKJoxx">--</div>
+                        <div class="metric-label" data-page-node-id="DnCgyB0HiRvt9vmHNHPB66">特征相关系数</div>
+                    </div>
+                </div>
+
+                <div class="instructions" style="margin-top:15px;" data-page-node-id="jLlXTDVhRYACq2YvgBK5vb">
+                    <h3 data-page-node-id="jZyBcHuS2GBRKpdCRBjvqr">观察要点</h3>
+                    <p data-page-node-id="NZjTZpYs2t7OJy2xQGmL9p">• 数据沿某条直线方向拉长时，PC1 会自动对齐这个「信息量最大」的方向</p>
+                    <p data-page-node-id="aZkLZRskWBXwVnWTUbY0XG">• 把点投影到 PC1 上（下图），只用 1 个数就能近似表示原来的 2 个数</p>
+                    <p data-page-node-id="IEUzCvONzUlP6Iee0AiQg3">• PC1 占比越高（数据越「扁」），降维损失的信息越少</p>
+                    <p data-page-node-id="99RElMFHXvAi5QO3gHeCxG">• 相关系数接近 ±1 时特别适合 PCA 降维；接近 0（圆形云）时两个方向同等重要</p>
+                </div>
+            </div>
+        </div>
+
+        <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;" data-page-node-id="HHntKfJrUCg1lNFZEp5bAc">
+            <div class="instructions" data-page-node-id="FqgbYyPXkenpGdpUhu2Yut">
+                <h3 data-page-node-id="pL5WmoIvX86Km6fHo8XRUB">PCA 原理</h3>
+
+                <h4 data-page-node-id="qA7oHua5DE0jw7DBpj1c30">中心化与协方差矩阵</h4>
+                <p data-page-node-id="ZvyKicyooruXPrmQZ6M0Sr">先减去均值使数据中心化，再计算特征间协方差矩阵 Σ：</p>
+                <div class="formula-container" data-page-node-id="IYiXjZMQD1X7MN3PHUAqlz">Σ = (1/n) · XᶜᵀXᶜ　　Σᵢⱼ = Cov(xᵢ, xⱼ)</div>
+
+                <h4 data-page-node-id="XeCzKcNdCWfDvBQdVO9HtJ">特征分解 = 找主轴</h4>
+                <p data-page-node-id="M2HVbhNnvolKOtRjnXGGlq">PCA 寻找使投影方差最大的单位向量方向，等价于协方差矩阵的特征向量问题：</p>
+                <div class="formula-container" data-page-node-id="WEvWw5m8eQzJaF4uV74roR">Σ·v = λ·v　　（λ 为沿方向 v 的投影方差）</div>
+                <p data-page-node-id="nQXss9LHVUXBJRMIDdZJ4H">特征值 λ 从大到小排序，对应特征向量就是第 1、2、… 主成分；λₖ / Σλ 就是第 k 主成分的方差解释率。</p>
+
+                <h4 data-page-node-id="2f8L2roawua6cadQTdIVHz">投影与重建</h4>
+                <div class="formula-container" data-page-node-id="B66GavySjXdSsl6duXpUPg">z = Vᵀ·xᶜ（降维）　　x̂ = V·z + x̄（重建）</div>
+                <p data-page-node-id="DIFsvj35YwJ53uaNuzzAMu">保留前 r 个主成分时，重建误差 = 被丢弃的 (d−r) 个特征值之和。图中把 2D 点压到 PC1 直线上，正体现了「用最少维度保留最多方差」的思想。</p>
+            </div>
+        </div>
+
+        <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;" data-page-node-id="RgOPdWBOgRJKN3tHss4FiA">⌂</a>
+
+        <div class="footer" data-page-node-id="XWhaRoqbpVt9t3qDwWwtXC">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+        <script>
+            // ================= 数据：强相关高斯 =================
+            let seed = 21;
+            function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+            function gauss() {
+                let u = 0, v = 0;
+                while (u === 0) u = rand();
+                while (v === 0) v = rand();
+                return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+            }
+
+            let points = [];
+            let mean = [0, 0];
+            let pcaResult = null;
+
+            function makeData() {
+                const pts = [];
+                for (let i = 0; i < 160; i++) {
+                    const t = gauss();
+                    const x1 = 3 + t * 1.6;
+                    const x2 = 2 + t * 0.9 + gauss() * 0.55;
+                    pts.push([x1, x2]);
+                }
+                return pts;
+            }
+
+            function computeMean() {
+                mean = [0, 0];
+                points.forEach(function (p) { mean[0] += p[0]; mean[1] += p[1]; });
+                mean[0] /= points.length;
+                mean[1] /= points.length;
+            }
+
+            function computePCA() {
+                // 协方差矩阵
+                let c00 = 0, c01 = 0, c11 = 0;
+                points.forEach(function (p) {
+                    const dx = p[0] - mean[0], dy = p[1] - mean[1];
+                    c00 += dx * dx; c01 += dx * dy; c11 += dy * dy;
+                });
+                const n = points.length;
+                c00 /= n; c01 /= n; c11 /= n;
+                // 2x2 特征分解（解析解）
+                const tr = c00 + c11;
+                const det = c00 * c11 - c01 * c01;
+                const disc = Math.sqrt(Math.max(tr * tr / 4 - det, 0));
+                const l1 = tr / 2 + disc;
+                const l2 = Math.max(tr / 2 - disc, 0);
+                // 特征向量
+                let v1;
+                if (Math.abs(c01) > 1e-12) {
+                    v1 = [l1 - c11, c01];
+                } else {
+                    v1 = c00 >= c11 ? [1, 0] : [0, 1];
+                }
+                const n1 = Math.sqrt(v1[0] * v1[0] + v1[1] * v1[1]);
+                v1 = [v1[0] / n1, v1[1] / n1];
+                const theta = Math.atan2(v1[1], v1[0]) * 180 / Math.PI;
+                const corr = c01 / Math.sqrt(c00 * c11);
+                return { l1: l1, l2: l2, v1: v1, theta: theta, corr: corr, varRatio: l1 / (l1 + l2) };
+            }
+
+            // ================= 原始空间绘图 =================
+            const oCanvas = document.getElementById('origCanvas');
+            const octx = oCanvas.getContext('2d');
+            const OW = oCanvas.width, OH = oCanvas.height;
+            const OXMIN = -1.5, OXMAX = 7.5, OYMIN = -1, OYMAX = 5.5;
+
+            function opx(v) { return (v - OXMIN) / (OXMAX - OXMIN) * OW; }
+            function opy(v) { return OH - (v - OYMIN) / (OYMAX - OYMIN) * OH; }
+
+            function drawOrig(withPCA, noiseLevel) {
+                octx.clearRect(0, 0, OW, OH);
+
+                // 数据点
+                points.forEach(function (p) {
+                    octx.beginPath();
+                    octx.arc(opx(p[0]), opy(p[1]), 4.5, 0, Math.PI * 2);
+                    octx.fillStyle = 'rgba(54,162,235,0.6)';
+                    octx.fill();
+                    octx.strokeStyle = 'rgba(54,162,235,0.9)';
+                    octx.lineWidth = 1;
+                    octx.stroke();
+                });
+
+                if (withPCA && pcaResult) {
+                    const v = pcaResult.v1;
+                    const sd1 = Math.sqrt(pcaResult.l1);
+                    const sd2 = Math.sqrt(pcaResult.l2);
+                    // 垂直方向
+                    const v2 = [-v[1], v[0]];
+                    const arrows = [
+                        { dir: v, len: sd1 * 2, color: '#e03131', label: 'PC1' },
+                        { dir: v2, len: sd2 * 2, color: '#f08c00', label: 'PC2' }
+                    ];
+                    arrows.forEach(function (a) {
+                        const x1 = opx(mean[0]), y1 = opy(mean[1]);
+                        const x2 = opx(mean[0] + a.dir[0] * a.len);
+                        const y2 = opy(mean[1] + a.dir[1] * a.len);
+                        octx.strokeStyle = a.color;
+                        octx.lineWidth = 3;
+                        octx.beginPath();
+                        octx.moveTo(x1, y1);
+                        octx.lineTo(x2, y2);
+                        octx.stroke();
+                        // 箭头头部
+                        const ang = Math.atan2(y2 - y1, x2 - x1);
+                        octx.beginPath();
+                        octx.moveTo(x2, y2);
+                        octx.lineTo(x2 - 12 * Math.cos(ang - 0.4), y2 - 12 * Math.sin(ang - 0.4));
+                        octx.lineTo(x2 - 12 * Math.cos(ang + 0.4), y2 - 12 * Math.sin(ang + 0.4));
+                        octx.closePath();
+                        octx.fillStyle = a.color;
+                        octx.fill();
+                        octx.fillStyle = a.color;
+                        octx.font = 'bold 13px Arial';
+                        octx.textAlign = 'left';
+                        octx.fillText(a.label, x2 + 6, y2);
+                    });
+
+                    // 投影点（重建误差可视化）
+                    if (noiseLevel > 0) {
+                        points.forEach(function (p) {
+                            const dx = p[0] - mean[0], dy = p[1] - mean[1];
+                            const t = dx * v[0] + dy * v[1];
+                            const proj = [mean[0] + t * v[0], mean[1] + t * v[1]];
+                            octx.beginPath();
+                            octx.moveTo(opx(p[0]), opy(p[1]));
+                            octx.lineTo(opx(proj[0]), opy(proj[1]));
+                            octx.strokeStyle = 'rgba(224,49,49,' + (0.10 + noiseLevel * 0.35).toFixed(2) + ')';
+                            octx.lineWidth = 1;
+                            octx.stroke();
+                            octx.beginPath();
+                            octx.arc(opx(proj[0]), opy(proj[1]), 2.5, 0, Math.PI * 2);
+                            octx.fillStyle = 'rgba(224,49,49,0.55)';
+                            octx.fill();
+                        });
+                    }
+
+                    // 均值点
+                    octx.beginPath();
+                    octx.arc(opx(mean[0]), opy(mean[1]), 6, 0, Math.PI * 2);
+                    octx.fillStyle = '#2f261a';
+                    octx.fill();
+                }
+
+                // 坐标轴
+                octx.strokeStyle = '#3e3324';
+                octx.lineWidth = 1.2;
+                octx.beginPath();
+                octx.moveTo(35, 10); octx.lineTo(35, OH - 30); octx.lineTo(OW - 10, OH - 30);
+                octx.stroke();
+                octx.fillStyle = '#584a36';
+                octx.font = '12px Arial';
+                octx.textAlign = 'center';
+                octx.fillText('特征 1 →', OW / 2, OH - 8);
+                octx.save();
+                octx.translate(14, OH / 2);
+                octx.rotate(-Math.PI / 2);
+                octx.fillText('特征 2 →', 0, 0);
+                octx.restore();
+            }
+
+            // ================= 投影结果（1D） =================
+            const pCanvas = document.getElementById('projCanvas');
+            const pctx = pCanvas.getContext('2d');
+            const PW = pCanvas.width, PH = pCanvas.height;
+
+            function drawProj() {
+                pctx.clearRect(0, 0, PW, PH);
+                pctx.strokeStyle = '#f2e7d0';
+                pctx.strokeRect(0.5, 0.5, PW - 1, PH - 1);
+                if (!pcaResult) {
+                    pctx.fillStyle = '#a6967d';
+                    pctx.font = '13px Arial';
+                    pctx.textAlign = 'center';
+                    pctx.fillText('点击「执行 PCA」查看投影', PW / 2, PH / 2);
+                    return;
+                }
+                const v = pcaResult.v1;
+                let minT = Infinity, maxT = -Infinity;
+                const ts = points.map(function (p) {
+                    const t = (p[0] - mean[0]) * v[0] + (p[1] - mean[1]) * v[1];
+                    if (t < minT) minT = t;
+                    if (t > maxT) maxT = t;
+                    return t;
+                });
+                const span = Math.max(maxT - minT, 1e-6);
+                // 轴线
+                pctx.strokeStyle = '#d9c9ac';
+                pctx.lineWidth = 1.5;
+                pctx.beginPath();
+                pctx.moveTo(20, PH / 2); pctx.lineTo(PW - 20, PH / 2);
+                pctx.stroke();
+                ts.forEach(function (t) {
+                    const x = 20 + (t - minT) / span * (PW - 40);
+                    pctx.beginPath();
+                    pctx.arc(x, PH / 2, 4, 0, Math.PI * 2);
+                    pctx.fillStyle = 'rgba(40,167,69,0.55)';
+                    pctx.fill();
+                });
+                pctx.fillStyle = '#6f6049';
+                pctx.font = '12px Arial';
+                pctx.textAlign = 'center';
+                pctx.fillText('PC1 坐标（每个点现在只用 1 个数表示）', PW / 2, PH - 8);
+            }
+
+            // ================= UI =================
+            function refresh(showPCA) {
+                pcaResult = computePCA();
+                const noise = parseFloat(document.getElementById('noiseSlider').value);
+                document.getElementById('noiseValue').textContent = noise.toFixed(2);
+                drawOrig(showPCA, noise);
+                drawProj();
+
+                const R = pcaResult;
+                document.getElementById('origFormula').innerHTML =
+                    '<div class="row"><span class="k">中心化</span>：<span class="fm">x̃ᵢ = xᵢ − x̄，　x̄ = (<span class="v">' + mean[0].toFixed(2) + ', ' + mean[1].toFixed(2) + '</span>)</span></div>' +
+                    '<div class="row"><span class="k">协方差矩阵</span>：<span class="fm">C = (1/n)·Σ x̃ᵢ·x̃ᵢᵀ</span>　→　<span class="k">特征分解</span>：<span class="fm">C·w = λ·w</span>　<span style="color:#8a755a">（红色箭头 = 特征向量 w，长度 ∝ √λ）</span></div>' +
+                    (showPCA
+                        ? '<div class="row"><span class="fm">λ₁ = <span class="v">' + R.l1.toFixed(3) + '</span>　λ₂ = <span class="v">' + R.l2.toFixed(3) + '</span>　主成分方向 w₁ = (<span class="v">' + R.v1[0].toFixed(3) + ', ' + R.v1[1].toFixed(3) + '</span>)　角度 <span class="v">' + R.theta.toFixed(1) + '°</span></span></div>' +
+                          '<div class="row"><span class="k">方差解释率</span>：<span class="fm">λ₁ / (λ₁ + λ₂) = <span class="v">' + (R.varRatio * 100).toFixed(1) + '%</span></span>　相关系数 <span class="fm">ρ = <span class="v">' + R.corr.toFixed(3) + '</span></span>　<span style="color:#8a755a">（ρ 越接近 ±1，二维冗余越大，降维损失越小）</span></div>'
+                        : '<div class="row"><span style="color:#8a755a">点击「执行 PCA」解出 λ、w 后，这里显示具体数值</span></div>');
+
+                document.getElementById('projFormula').innerHTML = showPCA
+                    ? '<div class="row"><span class="k">投影（压缩）</span>：<span class="fm">zᵢ = w₁ᵀ·x̃ᵢ = <span class="v">' + R.v1[0].toFixed(2) + '</span>·(x₁ − x̄₁) + <span class="v">' + R.v1[1].toFixed(2) + '</span>·(x₂ − x̄₂)</span></div>' +
+                      '<div class="row"><span class="k">重建（解压缩）</span>：<span class="fm">x̂ᵢ = x̄ + zᵢ·w₁</span>　（丢掉的是 λ₂ 方向的分量，损失 = <span class="v">' + (100 - R.varRatio * 100).toFixed(1) + '%</span> 方差）</div>' +
+                      '<div class="row"><span class="k">当前重建噪声</span> <span class="v">' + noise.toFixed(2) + '</span>　<span style="color:#8a755a">拖动滑块给 t 加扰动，点的横向抖动 = 投影误差</span></div>'
+                    : '<div class="row"><span style="color:#8a755a">执行 PCA 后这里显示投影与重建公式</span></div>';
+                if (showPCA) {
+                    document.getElementById('mTheta').textContent = pcaResult.theta.toFixed(1) + '°';
+                    document.getElementById('mVar1').textContent = (pcaResult.varRatio * 100).toFixed(1) + '%';
+                    document.getElementById('mCorr').textContent = pcaResult.corr.toFixed(3);
+                    const r1 = (pcaResult.varRatio * 100).toFixed(0) + '%';
+                    const r2 = (100 - pcaResult.varRatio * 100).toFixed(0) + '%';
+                    document.getElementById('var1Bar').style.width = r1;
+                    document.getElementById('var1Bar').textContent = 'PC1 ' + r1;
+                    document.getElementById('var2Bar').style.width = r2;
+                    document.getElementById('var2Bar').textContent = 'PC2 ' + r2;
+                }
+            }
+
+            let pcaShown = false;
+
+            document.getElementById('pcaBtn').addEventListener('click', function () {
+                pcaShown = true;
+                refresh(true);
+            });
+            document.getElementById('origBtn').addEventListener('click', function () {
+                pcaShown = false;
+                refresh(false);
+                document.getElementById('mTheta').textContent = '--°';
+                document.getElementById('mVar1').textContent = '--';
+                document.getElementById('mCorr').textContent = '--';
+                document.getElementById('var1Bar').style.width = '50%';
+                document.getElementById('var1Bar').textContent = 'PC1';
+                document.getElementById('var2Bar').style.width = '50%';
+                document.getElementById('var2Bar').textContent = 'PC2';
+            });
+            document.getElementById('noiseSlider').addEventListener('input', function () {
+                refresh(pcaShown);
+            });
+            document.getElementById('dataBtn').addEventListener('click', function () {
+                seed = Math.floor(Math.random() * 100000) + 1;
+                points = makeData();
+                computeMean();
+                refresh(pcaShown);
+            });
+
+            points = makeData();
+            computeMean();
+            refresh(false);
+        </script>
+    </div>
+</body>
+</html>

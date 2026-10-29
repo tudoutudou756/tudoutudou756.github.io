@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聚类分析 - K-means</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #faf2e3;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(122,82,32,0.16);
+        }
+        h1 { text-align: center; color: #3e3324; margin-bottom: 30px; }
+        h3 { color: #d2761f; margin-top: 20px; }
+        h4 { color: #4a3e2d; }
+
+        .layout { display: flex; gap: 25px; flex-wrap: wrap; }
+        .panel-main { flex: 2 1 580px; }
+        .panel-side { flex: 1 1 340px; }
+
+        .chart-box { border: 1px solid #e3d5bc; border-radius: 5px; padding: 8px; }
+        .formula-strip { margin-top: 8px; padding: 8px 11px; background: #fdf6e8; border: 1px solid #f0dcb4; border-left: 4px solid #d2761f; border-radius: 6px; font-size: 12.5px; color: #5a4126; line-height: 1.9; }
+        .formula-strip .fm { font-family: 'Cambria Math', Georgia, serif; font-size: 13.5px; color: #6b4a2b; }
+        .formula-strip .k { color: #a05f1c; font-weight: 700; }
+        .formula-strip .v { color: #c2410c; font-weight: 700; font-family: 'Cambria Math', Georgia, serif; }
+        .formula-strip .row + .row { margin-top: 2px; }
+        canvas { max-width: 100%; display: block; }
+
+        .controls { margin: 15px 0; }
+        .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-step { background-color: #d2761f; }
+        .btn-step:hover { background-color: #a85c12; }
+        .btn-run { background-color: #28a745; }
+        .btn-run:hover { background-color: #218838; }
+        .btn-reset { background-color: #dc3545; }
+        .btn-reset:hover { background-color: #c82333; }
+        .btn-data { background-color: #6c757d; }
+        .btn-data:hover { background-color: #5a6268; }
+
+        .k-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; font-weight: bold; color: #3e3324; }
+        input[type=range] { width: 160px; }
+
+        .slider-label { font-weight: bold; color: #3e3324; display: flex; justify-content: space-between; }
+        input[type=range].wide {
+            width: 100%; height: 8px; border-radius: 4px;
+            background: #e3d5bc; outline: none; -webkit-appearance: none;
+        }
+        input[type=range].wide::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%;
+            background: #d2761f; cursor: pointer;
+        }
+
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            background-color: #fbf5e8;
+            padding: 12px;
+            border-radius: 5px;
+            border: 1px solid #f0e6d2;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .metric-item { text-align: center; min-width: 100px; }
+        .metric-value { font-size: 1.15em; font-weight: bold; color: #d2761f; }
+        .metric-label { font-size: 0.85em; color: #6f6049; }
+
+        .status-line { font-weight: bold; color: #a05f1c; margin: 10px 0; min-height: 22px; }
+        .legend { font-size: 13px; color: #4a3e2d; margin: 6px 0; }
+        .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin: 0 4px 0 10px; }
+
+        .formula-container {
+            text-align: center;
+            padding: 15px;
+            background: #faf5e9;
+            border: 1px solid #f0e6d2;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Cambria Math', Georgia, serif;
+            font-size: 1.05em;
+            overflow-x: auto;
+        }
+        .instructions {
+            background-color: #fdf0d9;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #d2761f;
+        }
+        .instructions h3 { margin-top: 0; color: #d2761f; }
+        .home-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            z-index: 1000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #f2ad3c, #e06a2e);
+            box-shadow: 0 0 15px rgba(0,255,204,0.6);
+            transition: all 0.3s ease;
+            text-align: center;
+            line-height: 60px;
+        }
+        .home-btn:hover { transform: scale(1.1); }
+        .footer { text-align: center; margin-top: 40px; padding: 20px 0; color: #6f6049; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>聚类分析 - K-means</h1>
+
+        <div class="controls">
+            <div class="k-row">
+                <span>簇数 K = <span id="kValue">3</span></span>
+                <input type="range" id="kSlider" min="2" max="8" step="1" value="3">
+                <button class="btn-step" id="stepBtn">执行一步（分配→更新）</button>
+                <button class="btn-run" id="runBtn">自动运行</button>
+                <button class="btn-reset" id="resetBtn">重新初始化</button>
+                <button class="btn-data" id="dataBtn">换一批数据</button>
+            </div>
+        </div>
+
+        <div class="status-line" id="statusLine">拖动上方滑块选择 K，然后点击「执行一步」或「自动运行」</div>
+
+        <div class="layout">
+            <div class="panel-main">
+                <h3>聚类过程（✕ 为质心，虚线为其移动轨迹）</h3>
+                <div class="chart-box"><canvas id="clusterCanvas" width="640" height="440"></canvas>
+                    <div class="formula-strip" id="clusterFormula"></div>
+                </div>
+                <div class="legend">
+                    <span class="dot" style="background:#e8590c;"></span>簇 0
+                    <span class="dot" style="background:#2f9e44;"></span>簇 1
+                    <span class="dot" style="background:#4263eb;"></span>簇 2
+                    <span class="dot" style="background:#9c36b5;"></span>簇 3
+                    <span class="dot" style="background:#e03131;"></span>簇 4
+                    <span class="dot" style="background:#f08c00;"></span>簇 5
+                    <span class="dot" style="background:#0ca678;"></span>簇 6
+                    <span class="dot" style="background:#5f3dc4;"></span>簇 7
+                </div>
+            </div>
+
+            <div class="panel-side">
+                <h3>SSE（误差平方和）收敛曲线</h3>
+                <div class="chart-box"><canvas id="sseCanvas" width="360" height="220"></canvas>
+                    <div class="formula-strip" id="sseFormula"></div>
+                </div>
+
+                <h3>肘部法则：不同 K 的最终 SSE</h3>
+                <div class="chart-box"><canvas id="elbowCanvas" width="360" height="240"></canvas>
+                    <div class="formula-strip" id="elbowFormula">点击「自动执行」跑完一次后，这里会列出各 K 的 SSE 并标出自动肘点</div>
+                </div>
+
+                <div class="metrics">
+                    <div class="metric-item">
+                        <div class="metric-value" id="mSSE">--</div>
+                        <div class="metric-label">当前 SSE</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mIter">0</div>
+                        <div class="metric-label">迭代次数</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-value" id="mStatus">未开始</div>
+                        <div class="metric-label">状态</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="instructions">
+            <h3>使用说明</h3>
+            <p>• 「执行一步」：先按最近质心重新分配所有点，再把每个质心移到本簇均值位置</p>
+            <p>• 连续执行直到 SSE 不再变化（收敛），观察右侧 SSE 曲线单调下降</p>
+            <p>• 「重新初始化」会随机重放质心 —— 多试几次会发现结果可能不同（K-means 对初始值敏感）</p>
+            <p>• 肘部法则图显示不同 K 收敛后的 SSE：选「肘点」对应的 K 作为合理簇数</p>
+        </div>
+    </div>
+
+    <div style="padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(122,82,32,0.16); margin-top: 20px;">
+        <div class="instructions">
+            <h3>K-means 原理</h3>
+
+            <h4>目标函数</h4>
+            <p>把 n 个样本划分成 K 个簇，最小化所有样本到其簇中心（质心）的距离平方和：</p>
+            <div class="formula-container">SSE = Σᵢ Σₖ rᵢₖ·||xᵢ − μₖ||²　（rᵢₖ=1 表示样本 i 属于簇 k）</div>
+
+            <h4>两步交替优化（Lloyd 算法）</h4>
+            <p>① 固定质心，把每个点分配给最近质心（E 步，优化 r）；② 固定分配，把质心更新为簇内均值（M 步，优化 μ）。每一步都使 SSE 单调不增，因此必然收敛到局部最优。</p>
+
+            <h4>初始化与肘部法则</h4>
+            <p>K-means 对初始质心敏感，不同初值可能收敛到不同的局部最优 —— 实践中常多次随机初始化取最优（或用 k-means++）。K 的选择可用肘部法则：随 K 增大 SSE 必然下降，但下降速率在真实簇数附近出现拐点（肘部）。</p>
+        </div>
+    </div>
+
+    <a class="home-btn" href="../index.html" title="返回首页" style="color:white; font-size:28px; text-decoration:none;">⌂</a>
+
+    <div class="footer">&copy; 2026 机器学习课程期末作业 · 交互演示中心</div>
+
+    <script>
+        // ================= 数据 =================
+        let seed = 5;
+        function rand() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+        function gauss() {
+            let u = 0, v = 0;
+            while (u === 0) u = rand();
+            while (v === 0) v = rand();
+            return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+        }
+
+        const COLORS = ['#e8590c', '#2f9e44', '#4263eb', '#9c36b5', '#e03131', '#f08c00', '#0ca678', '#5f3dc4'];
+
+        let points = [];
+
+        function makeData() {
+            const pts = [];
+            const centers = [
+                [1.5, 1.5], [5.5, 1.2], [3.5, 4.5], [6.5, 4.2]
+            ];
+            const shuffled = centers.slice();
+            for (const c of shuffled) {
+                for (let i = 0; i < 45; i++) {
+                    pts.push({ x: [c[0] + gauss() * 0.7, c[1] + gauss() * 0.7] });
+                }
+            }
+            // 少量均匀噪声
+            for (let i = 0; i < 25; i++) {
+                pts.push({ x: [rand() * 8, rand() * 6] });
+            }
+            return pts;
+        }
+
+        // ================= K-means 状态 =================
+        let K = 3;
+        let centroids = [];
+        let centroidTrail = [];
+        let assign = [];
+        let iter = 0;
+        let sseHistory = [];
+        let converged = false;
+
+        function initCentroids() {
+            centroids = [];
+            centroidTrail = [];
+            const used = new Set();
+            while (centroids.length < K) {
+                const i = Math.floor(rand() * points.length);
+                if (used.has(i)) continue;
+                used.add(i);
+                centroids.push([points[i].x[0], points[i].x[1]]);
+            }
+            centroidTrail = centroids.map(c => [[c[0], c[1]]]);
+            assign = new Array(points.length).fill(-1);
+            iter = 0;
+            sseHistory = [];
+            converged = false;
+        }
+
+        function assignStep() {
+            let changed = 0;
+            points.forEach(function (p, i) {
+                let best = 0, bd = Infinity;
+                for (let k = 0; k < K; k++) {
+                    const dx = p.x[0] - centroids[k][0];
+                    const dy = p.x[1] - centroids[k][1];
+                    const d = dx * dx + dy * dy;
+                    if (d < bd) { bd = d; best = k; }
+                }
+                if (assign[i] !== best) changed++;
+                assign[i] = best;
+            });
+            return changed;
+        }
+
+        function updateStep() {
+            for (let k = 0; k < K; k++) {
+                let sx = 0, sy = 0, cnt = 0;
+                points.forEach(function (p, i) {
+                    if (assign[i] === k) { sx += p.x[0]; sy += p.x[1]; cnt++; }
+                });
+                if (cnt > 0) {
+                    centroids[k][0] = sx / cnt;
+                    centroids[k][1] = sy / cnt;
+                }
+            }
+            for (let k = 0; k < K; k++) centroidTrail[k].push([centroids[k][0], centroids[k][1]]);
+        }
+
+        function computeSSE() {
+            let sse = 0;
+            points.forEach(function (p, i) {
+                if (assign[i] < 0) return;
+                const dx = p.x[0] - centroids[assign[i]][0];
+                const dy = p.x[1] - centroids[assign[i]][1];
+                sse += dx * dx + dy * dy;
+            });
+            return sse;
+        }
+
+        function doStep() {
+            if (converged) return;
+            const changed = assignStep();
+            updateStep();
+            iter++;
+            const sse = computeSSE();
+            sseHistory.push(sse);
+            if (changed === 0 && iter > 1) {
+                converged = true;
+                document.getElementById('statusLine').textContent = '已收敛！SSE 稳定在 ' + sse.toFixed(1) + '，共迭代 ' + iter + ' 次';
+                document.getElementById('mStatus').textContent = '已收敛';
+            } else {
+                document.getElementById('statusLine').textContent = '第 ' + iter + ' 步完成：' + changed + ' 个点改变归属，当前 SSE = ' + sse.toFixed(1);
+                document.getElementById('mStatus').textContent = '迭代中';
+            }
+            refresh();
+        }
+
+        // ================= 绘制 =================
+        const canvas = document.getElementById('clusterCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        const XMIN = -1, XMAX = 9, YMIN = -1, YMAX = 7;
+
+        function px(v) { return (v - XMIN) / (XMAX - XMIN) * W; }
+        function py(v) { return H - (v - YMIN) / (YMAX - YMIN) * H; }
+
+        function draw() {
+            ctx.clearRect(0, 0, W, H);
+
+            // 质心轨迹
+            for (let k = 0; k < K; k++) {
+                if (centroidTrail[k] && centroidTrail[k].length > 1) {
+                    ctx.strokeStyle = COLORS[k];
+                    ctx.globalAlpha = 0.45;
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([5, 4]);
+                    ctx.beginPath();
+                    centroidTrail[k].forEach(function (c, i) {
+                        if (i === 0) ctx.moveTo(px(c[0]), py(c[1]));
+                        else ctx.lineTo(px(c[0]), py(c[1]));
+                    });
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.globalAlpha = 1;
+                }
+            }
+
+            // 数据点
+            points.forEach(function (p, i) {
+                const k = assign[i];
+                ctx.beginPath();
+                ctx.arc(px(p.x[0]), py(p.x[1]), 5, 0, Math.PI * 2);
+                ctx.fillStyle = k >= 0 ? COLORS[k % COLORS.length] : '#a6967d';
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // 质心
+            centroids.forEach(function (c, k) {
+                const cx = px(c[0]), cy = py(c[1]);
+                ctx.strokeStyle = COLORS[k % COLORS.length];
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(cx - 9, cy - 9); ctx.lineTo(cx + 9, cy + 9);
+                ctx.moveTo(cx - 9, cy + 9); ctx.lineTo(cx + 9, cy - 9);
+                ctx.stroke();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+                ctx.stroke();
+            });
+
+            // 坐标轴
+            ctx.strokeStyle = '#3e3324';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(30, 10); ctx.lineTo(30, H - 28); ctx.lineTo(W - 10, H - 28);
+            ctx.stroke();
+            ctx.fillStyle = '#584a36';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('特征 1 →', W / 2, H - 8);
+            ctx.save();
+            ctx.translate(12, H / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('特征 2 →', 0, 0);
+            ctx.restore();
+        }
+
+        // ================= SSE 曲线 =================
+        const sCanvas = document.getElementById('sseCanvas');
+        const sctx = sCanvas.getContext('2d');
+
+        function drawSSE() {
+            sctx.clearRect(0, 0, sCanvas.width, sCanvas.height);
+            sctx.strokeStyle = '#f2e7d0';
+            sctx.strokeRect(0.5, 0.5, sCanvas.width - 1, sCanvas.height - 1);
+            if (sseHistory.length < 1) {
+                sctx.fillStyle = '#a6967d';
+                sctx.font = '12px Arial';
+                sctx.textAlign = 'center';
+                sctx.fillText('暂无数据：先执行一步', sCanvas.width / 2, sCanvas.height / 2);
+                return;
+            }
+            const maxV = Math.max.apply(null, sseHistory);
+            const minV = Math.min.apply(null, sseHistory);
+            const span = Math.max(maxV - minV, 1e-6);
+            sctx.strokeStyle = '#e8590c';
+            sctx.lineWidth = 2.2;
+            sctx.beginPath();
+            sseHistory.forEach(function (v, i) {
+                const x = sseHistory.length === 1 ? 10 : 10 + i / (sseHistory.length - 1) * (sCanvas.width - 30);
+                const y = sCanvas.height - 20 - (v - minV) / span * (sCanvas.height - 40);
+                if (i === 0) sctx.moveTo(x, y); else sctx.lineTo(x, y);
+            });
+            sctx.stroke();
+            sctx.fillStyle = '#6f6049';
+            sctx.font = '11px Arial';
+            sctx.textAlign = 'left';
+            sctx.fillText('SSE: ' + sseHistory[sseHistory.length - 1].toFixed(1), 12, 14);
+        }
+
+        // ================= 肘部法则 =================
+        const eCanvas = document.getElementById('elbowCanvas');
+        const ectx = eCanvas.getContext('2d');
+
+        function kmeansRun(k, maxIter) {
+            // 独立副本运行
+            const cs = [];
+            const used = new Set();
+            let guard = 0;
+            while (cs.length < k && guard++ < 500) {
+                const i = Math.floor(rand() * points.length);
+                if (used.has(i)) continue;
+                used.add(i);
+                cs.push([points[i].x[0], points[i].x[1]]);
+            }
+            const asg = new Array(points.length).fill(-1);
+            for (let t = 0; t < maxIter; t++) {
+                let changed = 0;
+                points.forEach(function (p, i) {
+                    let best = 0, bd = Infinity;
+                    for (let kk = 0; kk < k; kk++) {
+                        const dx = p.x[0] - cs[kk][0];
+                        const dy = p.x[1] - cs[kk][1];
+                        const d = dx * dx + dy * dy;
+                        if (d < bd) { bd = d; best = kk; }
+                    }
+                    if (asg[i] !== best) changed++;
+                    asg[i] = best;
+                });
+                for (let kk = 0; kk < k; kk++) {
+                    let sx = 0, sy = 0, cnt = 0;
+                    points.forEach(function (p, i) {
+                        if (asg[i] === kk) { sx += p.x[0]; sy += p.x[1]; cnt++; }
+                    });
+                    if (cnt > 0) { cs[kk][0] = sx / cnt; cs[kk][1] = sy / cnt; }
+                }
+                if (changed === 0) break;
+            }
+            let sse = 0;
+            points.forEach(function (p, i) {
+                const dx = p.x[0] - cs[asg[i]][0];
+                const dy = p.x[1] - cs[asg[i]][1];
+                sse += dx * dx + dy * dy;
+            });
+            return sse;
+        }
+
+        function drawElbow() {
+            ectx.clearRect(0, 0, eCanvas.width, eCanvas.height);
+            ectx.strokeStyle = '#f2e7d0';
+            ectx.strokeRect(0.5, 0.5, eCanvas.width - 1, eCanvas.height - 1);
+            ectx.fillStyle = '#6f6049';
+            ectx.font = '11px Arial';
+            ectx.textAlign = 'center';
+            ectx.fillText('计算中...', eCanvas.width / 2, eCanvas.height / 2);
+
+            // 异步计算避免卡 UI
+            setTimeout(function () {
+                const ks = [];
+                const sses = [];
+                for (let k = 1; k <= 8; k++) {
+                    ks.push(k);
+                    sses.push(kmeansRun(k, 30));
+                }
+                const maxV = Math.max.apply(null, sses);
+                const minV = Math.min.apply(null, sses);
+                const span = Math.max(maxV - minV, 1e-6);
+                ectx.clearRect(0, 0, eCanvas.width, eCanvas.height);
+                ectx.strokeStyle = '#f2e7d0';
+                ectx.strokeRect(0.5, 0.5, eCanvas.width - 1, eCanvas.height - 1);
+                ectx.strokeStyle = '#4263eb';
+                ectx.lineWidth = 2.2;
+                ectx.beginPath();
+                sses.forEach(function (v, i) {
+                    const x = 35 + i / (sses.length - 1) * (eCanvas.width - 55);
+                    const y = eCanvas.height - 30 - (v - minV) / span * (eCanvas.height - 55);
+                    if (i === 0) ectx.moveTo(x, y); else ectx.lineTo(x, y);
+                });
+                ectx.stroke();
+                sses.forEach(function (v, i) {
+                    const x = 35 + i / (sses.length - 1) * (eCanvas.width - 55);
+                    const y = eCanvas.height - 30 - (v - minV) / span * (eCanvas.height - 55);
+                    ectx.beginPath();
+                    ectx.arc(x, y, 4, 0, Math.PI * 2);
+                    ectx.fillStyle = '#4263eb';
+                    ectx.fill();
+                    ectx.fillStyle = '#4a3e2d';
+                    ectx.font = '11px Arial';
+                    ectx.textAlign = 'center';
+                    ectx.fillText('K=' + ks[i], x, eCanvas.height - 12);
+                });
+                // 肘点：到「首尾连线」距离最大的 K（最大距离法）
+                let bestKi = 1, maxD = -1;
+                const x1 = ks[0], y1 = sses[0], x2 = ks[ks.length - 1], y2 = sses[sses.length - 1];
+                const denom = Math.sqrt((y2 - y1) * (y2 - y1) + (x2 - x1) * (x2 - x1)) || 1e-9;
+                for (let i = 1; i < ks.length - 1; i++) {
+                    const d = Math.abs((y2 - y1) * ks[i] - (x2 - x1) * sses[i] + x2 * y1 - y2 * x1) / denom;
+                    if (d > maxD) { maxD = d; bestKi = i; }
+                }
+                updateElbowStrip(ks, sses, ks[bestKi]);
+
+                ectx.fillStyle = '#6f6049';
+                ectx.font = '11px Arial';
+                ectx.textAlign = 'left';
+                ectx.fillText('K=1 时 SSE 最大', 38, 14);
+            }, 30);
+        }
+
+        function updateElbowStrip(ks, sses, bestK) {
+            const row = ks.map(function (k, i) {
+                return '<span class="fm">K=' + k + ' → <span class="v">' + sses[i].toFixed(0) + '</span></span>';
+            }).join('　');
+            document.getElementById('elbowFormula').innerHTML =
+                '<div class="row"><span class="k">目标</span>：<span class="fm">SSE(K) = Σ<sub>k=1..K</sub> Σ<sub>x ∈ C<sub>k</sub></sub> ‖x − μ<sub>k</sub>‖²</span>　<span style="color:#8a755a">（K 越大 SSE 必然越小，但会走向过拟合）</span></div>' +
+                '<div class="row"><span class="k">判据</span>：<span class="fm">选 SSE 下降速率骤减的「肘点」</span>　→ 本图自动给出 <span class="v">K = ' + bestK + '</span></div>' +
+                '<div class="row">' + row + '</div>';
+        }
+
+        // ================= UI =================
+        function refresh() {
+            document.getElementById('mSSE').textContent = sseHistory.length ? computeSSE().toFixed(1) : '--';
+            document.getElementById('mIter').textContent = iter;
+
+            const sseNow = sseHistory.length ? computeSSE() : null;
+            const muStr = centroids.map(function (c, k) {
+                return '<span style="color:' + COLORS[k] + '; font-weight:700">μ' + k + '</span>(<span class="v">' + c[0].toFixed(2) + ', ' + c[1].toFixed(2) + '</span>)';
+            }).join('　');
+            document.getElementById('clusterFormula').innerHTML =
+                '<div class="row"><span class="k">① 簇分配</span>：<span class="fm">cᵢ = argmin<sub>k</sub> ‖xᵢ − μ<sub>k</sub>‖²</span>　<span style="color:#8a755a">（每个点归到最近质心，颜色即归属）</span></div>' +
+                '<div class="row"><span class="k">② 质心更新</span>：<span class="fm">μ<sub>k</sub> = (1 / |C<sub>k</sub>|) · Σ<sub>xᵢ ∈ C<sub>k</sub></sub> xᵢ</span>　<span style="color:#8a755a">（✕ 沿虚线移动到簇成员均值）</span></div>' +
+                '<div class="row"><span style="color:#8a755a">当前</span> <span class="fm">K = <span class="v">' + K + '</span>　迭代 <span class="v">' + iter + '</span> 次' + (sseNow !== null ? '　SSE = <span class="v">' + sseNow.toFixed(1) + '</span>' : '') + (converged ? '　已收敛' : '') + '</span></div>' +
+                '<div class="row">' + muStr + '</div>';
+
+            const seg = sseHistory.length > 1 ? '（上一轮 → 本轮：' + sseHistory[sseHistory.length - 2].toFixed(1) + ' → ' + sseHistory[sseHistory.length - 1].toFixed(1) + '）' : '';            document.getElementById('sseFormula').innerHTML =
+                '<div class="row"><span class="k">目标函数</span>：<span class="fm">SSE = Σ<sub>k=1..K</sub> Σ<sub>x ∈ C<sub>k</sub></sub> ‖x − μ<sub>k</sub>‖²' + (sseNow !== null ? ' = <span class="v">' + sseNow.toFixed(1) + '</span>' : '') + '</span></div>' +
+                '<div class="row"><span class="k">收敛性</span>：<span class="fm">两步交替优化，SSE 单调不增；簇分配不再变化时停止</span> ' + seg + '</div>';
+
+            draw();
+            drawSSE();
+        }
+
+        const kSlider = document.getElementById('kSlider');
+        kSlider.addEventListener('input', function () {
+            K = parseInt(kSlider.value);
+            document.getElementById('kValue').textContent = K;
+            initCentroids();
+            refresh();
+        });
+
+        document.getElementById('stepBtn').addEventListener('click', doStep);
+        document.getElementById('runBtn').addEventListener('click', function () {
+            let guard = 0;
+            const timer = setInterval(function () {
+                if (converged || guard++ > 40) {
+                    clearInterval(timer);
+                    if (!converged) document.getElementById('statusLine').textContent = '已达最大迭代次数';
+                    drawElbow();
+                    return;
+                }
+                doStep();
+            }, 260);
+        });
+        document.getElementById('resetBtn').addEventListener('click', function () {
+            initCentroids();
+            document.getElementById('mStatus').textContent = '未开始';
+            document.getElementById('statusLine').textContent = '质心已重新随机初始化，点击「执行一步」开始';
+            refresh();
+        });
+        document.getElementById('dataBtn').addEventListener('click', function () {
+            seed = Math.floor(Math.random() * 100000) + 1;
+            points = makeData();
+            initCentroids();
+            document.getElementById('mStatus').textContent = '未开始';
+            document.getElementById('statusLine').textContent = '新数据已生成';
+            refresh();
+        });
+
+        points = makeData();
+        initCentroids();
+        refresh();
+    </script>
+</body>
+</html>
